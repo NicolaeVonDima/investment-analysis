@@ -26,6 +26,9 @@ from app.models import (
     Watchlist,
     WatchlistItem,
     RefreshJob,
+    Instrument,
+    ProviderSymbolMap,
+    PriceEOD,
 )
 from app.worker.tasks import process_analysis_task
 from app.api_schemas import (
@@ -42,6 +45,10 @@ from app.api_schemas import (
     WatchlistItemResponse,
     WatchlistStatusResponse,
     RefreshStatusResponse,
+    ResolveInstrumentRequest,
+    InstrumentResponse,
+    LiteSnapshotResponse,
+    BackfillEnqueueResponse,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 
@@ -73,6 +80,12 @@ class TickerRequest(BaseModel):
 async def startup_event():
     """Initialize database on startup."""
     init_db()
+    # Seed initial instruments (best-effort)
+    try:
+        db = next(get_db())
+        _seed_instruments(db)
+    except Exception:
+        pass
 
 
 @app.get("/")
@@ -112,6 +125,44 @@ def _get_or_create_default_watchlist(db, user_id: str) -> Watchlist:
     db.commit()
     db.refresh(wl)
     return wl
+
+
+def _seed_instruments(db):
+    """
+    MVP seed per provider spec:
+    - ADBE
+    - GOOGL (alias GOOG)
+    """
+
+    def ensure(symbol: str, aliases: list[str]):
+        sym = symbol.upper().strip()
+        inst = db.query(Instrument).filter(Instrument.canonical_symbol == sym).first()
+        if not inst:
+            inst = Instrument(canonical_symbol=sym)
+            db.add(inst)
+            db.commit()
+            db.refresh(inst)
+
+        for a in [sym, *aliases]:
+            ps = a.upper().strip()
+            existing = (
+                db.query(ProviderSymbolMap)
+                .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == ps)
+                .first()
+            )
+            if not existing:
+                db.add(
+                    ProviderSymbolMap(
+                        provider="alpha_vantage",
+                        provider_symbol=ps,
+                        instrument_id=inst.id,
+                        is_primary=(ps == sym),
+                    )
+                )
+        db.commit()
+
+    ensure("ADBE", [])
+    ensure("GOOGL", ["GOOG"])
 
 
 @app.post("/api/analyze", status_code=202)
@@ -484,6 +535,147 @@ async def get_watchlist_config():
         "refresh_hour_utc": int(os.getenv("WATCHLIST_REFRESH_HOUR", "2")),
         "refresh_minute_utc": int(os.getenv("WATCHLIST_REFRESH_MINUTE", "0")),
     }
+
+
+# ---------------------------------------------------------------------------
+# Instruments + composable fetch endpoints (Alpha Vantage MVP)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/instruments/resolve", response_model=InstrumentResponse)
+async def resolve_instrument(request: ResolveInstrumentRequest):
+    """
+    Resolve an input symbol to a canonical instrument.
+    Prefer provider symbol maps; otherwise create a new instrument using the symbol as canonical.
+    """
+    db = next(get_db())
+    symbol = request.symbol.upper().strip()
+    if not symbol.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid symbol format")
+
+    mapping = (
+        db.query(ProviderSymbolMap)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == symbol)
+        .first()
+    )
+    if mapping:
+        inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
+        if not inst:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+        return InstrumentResponse(
+            id=inst.id,
+            canonical_symbol=inst.canonical_symbol,
+            name=inst.name,
+            exchange=inst.exchange,
+            sector=inst.sector,
+            industry=inst.industry,
+            currency=inst.currency,
+        )
+
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == symbol).first()
+    if not inst:
+        inst = Instrument(canonical_symbol=symbol)
+        db.add(inst)
+        db.commit()
+        db.refresh(inst)
+
+    # Ensure provider map exists (best-effort)
+    try:
+        existing = (
+            db.query(ProviderSymbolMap)
+            .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == symbol)
+            .first()
+        )
+        if not existing:
+            db.add(
+                ProviderSymbolMap(
+                    provider="alpha_vantage",
+                    provider_symbol=symbol,
+                    instrument_id=inst.id,
+                    is_primary=True,
+                )
+            )
+            db.commit()
+    except Exception:
+        db.rollback()
+
+    return InstrumentResponse(
+        id=inst.id,
+        canonical_symbol=inst.canonical_symbol,
+        name=inst.name,
+        exchange=inst.exchange,
+        sector=inst.sector,
+        industry=inst.industry,
+        currency=inst.currency,
+    )
+
+
+@app.get("/api/instruments/{instrument_id}/snapshot/latest-lite", response_model=LiteSnapshotResponse)
+async def get_latest_lite_snapshot(instrument_id: int):
+    """
+    Serve from DB if present; otherwise return last known snapshot with stale=true and
+    best-effort queue a provider refresh job.
+    """
+    db = next(get_db())
+    inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instrument not found")
+
+    today = datetime.utcnow().date()
+    latest = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .first()
+    )
+    stale = (latest is None) or (latest.as_of_date < today)
+    refresh_queued = False
+
+    if stale:
+        try:
+            from app.worker.tasks import refresh_instrument_lite
+
+            refresh_instrument_lite.delay(inst.id)
+            refresh_queued = True
+        except Exception:
+            refresh_queued = False
+
+    return LiteSnapshotResponse(
+        instrument=InstrumentResponse(
+            id=inst.id,
+            canonical_symbol=inst.canonical_symbol,
+            name=inst.name,
+            exchange=inst.exchange,
+            sector=inst.sector,
+            industry=inst.industry,
+            currency=inst.currency,
+        ),
+        as_of_date=latest.as_of_date if latest else None,
+        price=(latest.adjusted_close or latest.close) if latest else None,
+        currency=inst.currency,
+        stale=stale,
+        refresh_queued=refresh_queued,
+        provider=latest.provider if latest else None,
+        fetched_at=latest.fetched_at.isoformat() if latest and latest.fetched_at else None,
+    )
+
+
+@app.post("/api/instruments/{instrument_id}/backfill", response_model=BackfillEnqueueResponse, status_code=202)
+async def enqueue_instrument_backfill(instrument_id: int):
+    db = next(get_db())
+    inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instrument not found")
+
+    request_key = f"alpha_vantage:backfill:{inst.id}:5y"
+    try:
+        from app.worker.tasks import backfill_instrument_data
+
+        backfill_instrument_data.delay(inst.id)
+    except Exception:
+        pass
+
+    return BackfillEnqueueResponse(instrument_id=inst.id, status="queued", request_key=request_key, job_id=None)
 
 
 @app.get("/api/watchlists", response_model=list[WatchlistResponse])

@@ -111,3 +111,40 @@ class WatchlistStatusResponse(BaseModel):
     stale_count: int
 
 
+# ---------------------------------------------------------------------------
+# Instruments + Alpha Vantage composable fetch
+# ---------------------------------------------------------------------------
+
+
+class ResolveInstrumentRequest(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=32)
+
+
+class InstrumentResponse(BaseModel):
+    id: int
+    canonical_symbol: str
+    name: Optional[str] = None
+    exchange: Optional[str] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    currency: Optional[str] = None
+
+
+class LiteSnapshotResponse(BaseModel):
+    instrument: InstrumentResponse
+    as_of_date: Optional[date] = None
+    price: Optional[float] = None
+    currency: Optional[str] = None
+    stale: bool
+    refresh_queued: bool = False
+    provider: Optional[str] = None
+    fetched_at: Optional[str] = None
+
+
+class BackfillEnqueueResponse(BaseModel):
+    instrument_id: int
+    status: str
+    request_key: str
+    job_id: Optional[int] = None
+
+

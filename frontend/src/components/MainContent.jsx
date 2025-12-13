@@ -11,6 +11,10 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   const [jobId, setJobId] = useState(null)
   const [addingToWatchlist, setAddingToWatchlist] = useState(false)
   const [watchlistAdded, setWatchlistAdded] = useState(false)
+  const [instrument, setInstrument] = useState(null)
+  const [lite, setLite] = useState(null)
+  const [liteLoading, setLiteLoading] = useState(false)
+  const [liteError, setLiteError] = useState(null)
 
   const tabs = [
     'Key Data',
@@ -63,10 +67,25 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   }
 
   useEffect(() => {
-    if (ticker && ticker !== 'IE00B4L5Y983') {
-      handleAnalyze()
+    // Load UI-lite snapshot (preferred for UI identity/price/freshness).
+    const run = async () => {
+      if (!ticker) return
+      setLiteLoading(true)
+      setLiteError(null)
+      try {
+        const resolved = await axios.post(`${API_URL}/instruments/resolve`, { symbol: ticker })
+        setInstrument(resolved.data)
+        const snap = await axios.get(`${API_URL}/instruments/${resolved.data.id}/snapshot/latest-lite`)
+        setLite(snap.data)
+      } catch (e) {
+        setLiteError(e?.response?.data?.detail || e.message)
+        setLite(null)
+        setInstrument(null)
+      } finally {
+        setLiteLoading(false)
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    run()
   }, [ticker])
 
   const addToWatchlist = async () => {
@@ -89,14 +108,19 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   }
 
   // Mock data for demonstration
+  const companyName =
+    lite?.instrument?.name ||
+    instrument?.name ||
+    (ticker ? `${ticker} Stock` : 'Unknown')
+
   const mockData = {
     company: {
-      name: ticker ? `${ticker} Stock` : 'iShares Core MSCI World UCITS ETF USD (Acc)',
+      name: companyName,
       ticker: ticker || 'IE00B4L5Y983'
     },
-    currentPrice: 111.98,
-    change: 15.76,
-    changePercent: 16.53,
+    currentPrice: typeof lite?.price === 'number' ? lite.price : null,
+    change: null,
+    changePercent: null,
     rating: 4.72,
     fundSize: '$99869m',
     ter: '0.20%',
@@ -116,6 +140,16 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
             <span className="rating-value">{mockData.rating}</span>
             <span className="rating-star">⭐</span>
           </div>
+          <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
+            {liteLoading ? 'Loading snapshot…' : liteError ? `Snapshot error: ${liteError}` : null}
+            {!liteLoading && !liteError && lite ? (
+              <>
+                <span>{lite.stale ? 'Stale' : 'Fresh'}</span>
+                {lite.as_of_date ? <span>{` • as of ${lite.as_of_date}`}</span> : null}
+                {lite.refresh_queued ? <span>{' • refresh queued'}</span> : null}
+              </>
+            ) : null}
+          </div>
         </div>
 
         <div className="product-actions">
@@ -124,6 +158,17 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
           </button>
           <button className="action-btn">
             <span>⬇️</span> Download Factsheet
+          </button>
+          <button
+            className="action-btn"
+            disabled={!instrument?.id}
+            onClick={async () => {
+              if (!instrument?.id) return
+              await axios.post(`${API_URL}/instruments/${instrument.id}/backfill`)
+              alert('Backfill queued')
+            }}
+          >
+            <span>⏳</span> Backfill
           </button>
           <button className="action-btn primary" onClick={addToWatchlist} disabled={addingToWatchlist}>
             {watchlistAdded ? 'Added to Watchlist' : addingToWatchlist ? 'Adding…' : 'Add to Watchlist'}

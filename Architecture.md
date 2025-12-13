@@ -35,3 +35,28 @@ The platform is composed of:
 - Local dev fallback (no Docker): SQLite + Celery eager mode can be used to run the API/UI; production path remains Docker-first.
 
 
+## 2025-12-13 — v1.2.0 — Alpha Vantage + Composable Fetch (UI-lite + Backfill)
+
+Source: [Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf](file://Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf)
+
+### Motivation
+The UI needs a lightweight path to show identity/price/freshness without always triggering a heavy analysis run, and without duplicating work across users.
+
+### New persistence layer: Instruments + Provider-normalized market data
+- `instrument`: canonical symbol + identity fields
+- `provider_symbol_map`: provider-specific symbol aliases mapping onto a canonical instrument
+- `price_eod`: immutable EOD price rows per instrument/day
+- `fundamentals_snapshot`: immutable fundamental statement snapshots per instrument/period
+
+### Composable endpoints
+- **Resolve**: map user symbol input -> canonical instrument id
+- **Latest-lite snapshot**: return DB snapshot if present; else return last value + stale + enqueue refresh
+- **Backfill**: enqueue heavy job for >=5y daily adjusted prices + fundamentals
+
+### Work tracking (idempotency/retries)
+We introduce `provider_refresh_jobs` to track provider operations (lite/backfill), separate from `refresh_jobs` used for watchlist daily refresh, to avoid semantic conflicts and to support different uniqueness keys.
+
+### Rate limiting strategy
+- Worker tasks are rate limited per provider (Alpha Vantage free tier constraints).
+- Retries with backoff; UI remains functional by serving last known snapshots with `stale=true`.
+

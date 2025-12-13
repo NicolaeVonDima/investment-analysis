@@ -1,52 +1,135 @@
-# Cursor Project Rules – Investment Analysis Platform
+# Cursor Project Rules — Investment Analysis Platform
 
-## Canonical Context Files (Must Exist)
-The following files are the source of truth and must be created if missing and updated continuously:
+## Prime Directive
+You are operating inside a long-term, rules-based investment analysis platform.
+Optimize for:
+- Reproducibility (same inputs → same outputs)
+- Auditability (every number traceable to a snapshot & source)
+- Reuse-first engineering (avoid duplicate logic)
+- Long-term horizons (no day trading, no live data dependency)
 
-- Specifications.md — authoritative record of all agreed requirements and feature specifications
-- Architecture.md — living architecture overview derived from Specifications
-- ProjectStatus.md — timeline of progress, current focus, risks, and next tasks
+---
 
-## Optional but Strongly Recommended Context Files
-If present, these files must also be respected and updated:
+## Canonical Context Files (MUST exist at repo root)
+Create if missing and keep updated using append-only history:
+- Specifications.md
+- Architecture.md
+- ProjectStatus.md
 
-- Decisions.md (or /adr/) — Architecture Decision Records explaining why key choices were made
-- DataSources.md — data providers, endpoints, refresh cadence, limitations, licensing notes
-- Backlog.md — prioritized backlog of future work
-- Glossary.md — canonical definitions of domain terms
-- Runbook.md — local run instructions, refresh procedures, troubleshooting, deployment notes
+## Strongly Recommended Context Files
+Create when first needed and maintain append-only history:
+- Decisions.md (or /adr/) — architectural decisions and rationale
+- DataSources.md — providers, endpoints, cadence, limitations, licensing
+- Backlog.md — prioritized future work
+- Glossary.md — canonical domain terminology
+- Runbook.md — local run, refresh, troubleshooting, deployment
+- ImplementationNotes.md — optional concise implementation log
+- TestPlan.md — testing structure, commands, gaps
 
-## Global Rules (Apply to Every Request)
-- Always read existing context files before proposing changes.
-- For every user request:
-  - validate it against existing specifications
-  - update Specifications.md, Architecture.md, and ProjectStatus.md.
-- If a request conflicts with existing specifications or architecture:
-  - explicitly flag the conflict
-  - ask for clarification before proceeding.
-- Prefer reuse over new code.
-  - Introduce new modules only as a last resort
-  - Document justification when new code is unavoidable.
-- Never overwrite historical information.
-  - All context files are append-only
-  - Use dates (YYYY-MM-DD) and version identifiers (vX.Y.Z).
-- Explicitly record assumptions when requirements are ambiguous.
-- Do not invent data sources, metrics, or architecture components not grounded in documented specifications.
-- Treat data snapshots, analyses, and memos as immutable and reproducible artifacts.
+---
 
-## File-Specific Update Rules
-- Specifications.md:
-  - Append new specs with date, scope, acceptance criteria, non-goals, and data impact.
-- Architecture.md:
-  - Assess the impact of each new spec
-  - Prefer reuse
-  - Update diagrams/sections minimally.
-- ProjectStatus.md:
-  - Track what changed
-  - Current focus
-  - Risks and mitigations
-  - Next concrete tasks.
-- Decisions.md:
-  - Record why a decision was made and alternatives rejected.
-- DataSources.md:
-  - Update whenever providers, refresh cadence, or limitations change.
+## Global Behavioral Rules (Apply to EVERY request)
+1. Always read existing context files before proposing changes.
+2. Never overwrite history in any context file.
+   - Append using YYYY-MM-DD timestamps.
+   - Include version identifiers where applicable (ruleset/prompt/template vX.Y.Z).
+3. If a request conflicts with existing Specifications or Architecture:
+   - Explicitly flag the conflict.
+   - Ask for clarification BEFORE implementation.
+4. Prefer reuse over new code:
+   - Extend existing modules first.
+   - Introduce new modules only as last resort.
+   - Record justification in Decisions.md.
+5. Never invent data:
+   - Narratives must only reference computed inputs.
+   - Use only documented data sources and schemas.
+6. Treat snapshots and analyses as immutable artifacts:
+   - Refresh creates new snapshots.
+   - Never mutate historical data.
+   - Always store source + as-of metadata.
+
+---
+
+## Required Workflow Contract (STRICT)
+Every change request MUST follow this lifecycle:
+
+A) Specification Review  
+B) Architecture Impact Analysis  
+C) Context Update  
+D) Implementation  
+E) Testing  
+F) Status & Git Commit  
+
+### Role responsibilities
+- Spec Reviewer:
+  - Validates request against Specifications.md.
+  - Blocks conflicting or ambiguous scope.
+
+- Architecture Reviewer:
+  - Assesses impact using Architecture.md.
+  - Enforces reuse-first design.
+  - Records major choices in Decisions.md.
+
+- Context Keeper:
+  - Updates Specifications.md, Architecture.md, ProjectStatus.md.
+  - Ensures optional context files stay consistent.
+
+- Implementation Agent:
+  - Implements ONLY approved spec deltas.
+  - Produces minimal diffs.
+  - Updates ProjectStatus.md and ImplementationNotes.md (if present).
+
+- Testing Agent:
+  - Adds/updates unit, integration, and golden tests.
+  - Runs tests when possible.
+  - Produces PASS / FAIL outcome.
+  - Updates risks and gaps in ProjectStatus.md.
+
+---
+
+## Platform Invariants (DO NOT violate unless explicitly approved)
+- End-of-day and periodic data only (no live feeds).
+- Global shared refresh per (ticker, as_of_date).
+- Watchlist refresh universe = union of active watchlists.
+- Append-only snapshots for:
+  - raw data
+  - derived metrics
+  - evidence factors
+  - memos
+- Versioned rulesets, prompts, templates.
+- Portfolio logic must consume analysis; never embed portfolio logic into ticker analysis.
+
+---
+
+## Git Commit & Push Policy (ENFORCED)
+After a FULL workflow completion:
+
+1. Cursor MUST:
+   - Run `git status`.
+   - Summarize all changed files.
+   - Propose a structured commit message.
+
+2. Cursor MUST ask explicitly:
+   “Approve commit and push to origin?”
+
+3. Cursor MAY execute `git commit` and `git push`
+   ONLY after explicit user approval.
+
+4. Commit message format:
+
+   <type>: <short summary>
+
+   - Scope: <feature/module>
+   - Specs: <spec reference>
+   - Tests: <added/updated/none>
+   - Notes: <migrations, risks, follow-ups>
+
+5. No force-pushes.
+6. No direct pushes to protected branches unless explicitly approved.
+
+---
+
+## Output Expectations
+- Prefer patch/diff outputs.
+- If full files are changed, clearly list filenames.
+- Keep documentation concise, structured, and scannable.

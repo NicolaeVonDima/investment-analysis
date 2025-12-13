@@ -17,12 +17,19 @@ from app.models import (
     RefreshJobItem,
     RefreshJobStatus,
     RefreshJobItemStatus,
+    Instrument,
+    ProviderSymbolMap,
+    PriceEOD,
+    FundamentalsSnapshot,
+    ProviderRefreshJob,
+    ProviderRefreshJobStatus,
 )
 from app.services.data_fetcher import DataFetcher
 from app.services.metric_computer import MetricComputer
 from app.services.narrative_generator import NarrativeGenerator
 from app.services.pdf_generator import PDFGenerator
 from app.services.evidence_builder import EvidenceBuilder
+from app.services.alpha_vantage_client import AlphaVantageClient, parse_global_quote_price
 from app.schemas import InvestmentMemorandum, CompanyInfo
 from datetime import datetime, date
 import json
@@ -401,6 +408,340 @@ def refresh_watchlist_universe(self):
             job = db.query(RefreshJob).filter(RefreshJob.as_of_date == as_of_date).first()
             if job:
                 job.status = RefreshJobStatus.FAILED
+                job.error_message = str(e) + "\n" + traceback.format_exc()
+                job.completed_at = datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="refresh_instrument_lite", rate_limit="5/m")
+def refresh_instrument_lite(self, instrument_id: int):
+    """
+    Lite refresh:
+    - fetch company overview + latest quote from Alpha Vantage
+    - update Instrument identity fields (best-effort)
+    - insert today's PriceEOD (idempotent via unique constraint)
+    - record ProviderRefreshJob for audit/idempotency
+    """
+    db = SessionLocal()
+    today = datetime.utcnow().date()
+    request_key = f"alpha_vantage:lite:{instrument_id}:{today.isoformat()}"
+
+    try:
+        inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
+        if not inst:
+            raise ValueError("Instrument not found")
+
+        job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+        if not job:
+            job = ProviderRefreshJob(
+                provider="alpha_vantage",
+                job_type="lite",
+                instrument_id=inst.id,
+                as_of_date=today,
+                request_key=request_key,
+                status=ProviderRefreshJobStatus.PENDING,
+            )
+            db.add(job)
+            try:
+                db.commit()
+                db.refresh(job)
+            except IntegrityError:
+                db.rollback()
+                job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+
+        if job and job.status == ProviderRefreshJobStatus.COMPLETED:
+            return {"status": "skipped", "request_key": request_key}
+
+        job.status = ProviderRefreshJobStatus.RUNNING
+        job.started_at = datetime.utcnow()
+        job.attempts = (job.attempts or 0) + 1
+        job.error_message = None
+        db.commit()
+
+        # Resolve provider symbol (prefer primary mapping)
+        mapping = (
+            db.query(ProviderSymbolMap)
+            .filter(
+                ProviderSymbolMap.provider == "alpha_vantage",
+                ProviderSymbolMap.instrument_id == inst.id,
+            )
+            .order_by(ProviderSymbolMap.is_primary.desc(), ProviderSymbolMap.id.asc())
+            .first()
+        )
+        symbol = mapping.provider_symbol if mapping else inst.canonical_symbol
+
+        client = AlphaVantageClient()
+        overview = client.get_company_overview(symbol)
+        quote = client.get_global_quote(symbol)
+        parsed = parse_global_quote_price(quote)
+
+        # Update identity (best-effort, do not invent)
+        ov = overview.get("payload") if isinstance(overview, dict) else None
+        if isinstance(ov, dict):
+            inst.name = ov.get("Name") or inst.name
+            inst.exchange = ov.get("Exchange") or inst.exchange
+            inst.sector = ov.get("Sector") or inst.sector
+            inst.industry = ov.get("Industry") or inst.industry
+            inst.currency = ov.get("Currency") or inst.currency
+            db.commit()
+
+        price = parsed.get("price")
+        as_of = parsed.get("as_of_date") or today
+
+        # Insert or reuse today's price
+        existing = (
+            db.query(PriceEOD)
+            .filter(PriceEOD.instrument_id == inst.id, PriceEOD.as_of_date == as_of)
+            .order_by(PriceEOD.fetched_at.desc())
+            .first()
+        )
+        if not existing:
+            row = PriceEOD(
+                instrument_id=inst.id,
+                as_of_date=as_of,
+                close=price,
+                adjusted_close=price,
+                volume=None,
+                provider="alpha_vantage",
+                source_metadata={
+                    "overview": {"endpoint": "OVERVIEW", "fetched_at": overview.get("fetched_at")},
+                    "quote": {"endpoint": "GLOBAL_QUOTE", "fetched_at": quote.get("fetched_at")},
+                },
+            )
+            db.add(row)
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+
+        job.status = ProviderRefreshJobStatus.COMPLETED
+        job.completed_at = datetime.utcnow()
+        job.stats = {"symbol": symbol, "as_of_date": as_of.isoformat(), "price": price}
+        db.commit()
+        return {"status": "completed", "request_key": request_key}
+
+    except Exception as e:
+        try:
+            job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+            if job:
+                job.status = ProviderRefreshJobStatus.FAILED
+                job.error_message = str(e)
+                job.completed_at = datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="backfill_instrument_data", rate_limit="5/m")
+def backfill_instrument_data(self, instrument_id: int):
+    """
+    Heavy backfill:
+    - fetch TIME_SERIES_DAILY_ADJUSTED (full) and store >=5y daily rows in price_eod
+    - fetch fundamentals statements and store immutable snapshots
+    - idempotent via uniqueness constraints + ProviderRefreshJob request_key
+    """
+    db = SessionLocal()
+    request_key = f"alpha_vantage:backfill:{instrument_id}:5y"
+    started = datetime.utcnow()
+
+    try:
+        inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
+        if not inst:
+            raise ValueError("Instrument not found")
+
+        job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+        if not job:
+            job = ProviderRefreshJob(
+                provider="alpha_vantage",
+                job_type="backfill",
+                instrument_id=inst.id,
+                as_of_date=datetime.utcnow().date(),
+                request_key=request_key,
+                status=ProviderRefreshJobStatus.PENDING,
+            )
+            db.add(job)
+            try:
+                db.commit()
+                db.refresh(job)
+            except IntegrityError:
+                db.rollback()
+                job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+
+        if job and job.status == ProviderRefreshJobStatus.COMPLETED:
+            return {"status": "skipped", "request_key": request_key}
+
+        job.status = ProviderRefreshJobStatus.RUNNING
+        job.started_at = started
+        job.attempts = (job.attempts or 0) + 1
+        job.error_message = None
+        db.commit()
+
+        mapping = (
+            db.query(ProviderSymbolMap)
+            .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.instrument_id == inst.id)
+            .order_by(ProviderSymbolMap.is_primary.desc(), ProviderSymbolMap.id.asc())
+            .first()
+        )
+        symbol = mapping.provider_symbol if mapping else inst.canonical_symbol
+
+        client = AlphaVantageClient()
+
+        # Prices
+        daily = client.get_daily_adjusted(symbol)
+        payload = daily.get("payload") if isinstance(daily, dict) else None
+        ts = payload.get("Time Series (Daily)") if isinstance(payload, dict) else None
+        if not isinstance(ts, dict):
+            raise ValueError("Unexpected TIME_SERIES_DAILY_ADJUSTED payload")
+
+        today = datetime.utcnow().date()
+        cutoff = date(today.year - 5, today.month, today.day)
+        inserted = 0
+        skipped = 0
+
+        for d_str, row in ts.items():
+            try:
+                d = date.fromisoformat(d_str)
+            except Exception:
+                continue
+            if d < cutoff:
+                continue
+            if not isinstance(row, dict):
+                continue
+            try:
+                close = float(row.get("4. close")) if row.get("4. close") else None
+                adj = float(row.get("5. adjusted close")) if row.get("5. adjusted close") else None
+                vol = float(row.get("6. volume")) if row.get("6. volume") else None
+            except Exception:
+                close, adj, vol = None, None, None
+
+            exists = db.query(PriceEOD).filter(PriceEOD.instrument_id == inst.id, PriceEOD.as_of_date == d).first()
+            if exists:
+                skipped += 1
+                continue
+            db.add(
+                PriceEOD(
+                    instrument_id=inst.id,
+                    as_of_date=d,
+                    close=close,
+                    adjusted_close=adj,
+                    volume=vol,
+                    provider="alpha_vantage",
+                    source_metadata={"endpoint": "TIME_SERIES_DAILY_ADJUSTED", "fetched_at": daily.get("fetched_at")},
+                )
+            )
+            try:
+                db.commit()
+                inserted += 1
+            except IntegrityError:
+                db.rollback()
+                skipped += 1
+
+        # Fundamentals snapshots (annual + quarterly)
+        def upsert_fund(statement_type: str, freq: str, period_end: date, payload_obj: dict, meta: dict):
+            existing = (
+                db.query(FundamentalsSnapshot)
+                .filter(
+                    FundamentalsSnapshot.instrument_id == inst.id,
+                    FundamentalsSnapshot.statement_type == statement_type,
+                    FundamentalsSnapshot.frequency == freq,
+                    FundamentalsSnapshot.period_end == period_end,
+                )
+                .first()
+            )
+            if existing:
+                return False
+            db.add(
+                FundamentalsSnapshot(
+                    instrument_id=inst.id,
+                    statement_type=statement_type,
+                    frequency=freq,
+                    period_end=period_end,
+                    provider="alpha_vantage",
+                    payload=payload_obj,
+                    source_metadata=meta,
+                )
+            )
+            try:
+                db.commit()
+                return True
+            except IntegrityError:
+                db.rollback()
+                return False
+
+        # Overview
+        overview = client.get_company_overview(symbol)
+        ovp = overview.get("payload") if isinstance(overview, dict) else None
+        if isinstance(ovp, dict) and ovp.get("Symbol"):
+            # Use "LatestQuarter" as a reasonable period_end anchor when present
+            latest_q = ovp.get("LatestQuarter")
+            try:
+                period_end = date.fromisoformat(latest_q) if latest_q else today
+            except Exception:
+                period_end = today
+            upsert_fund("overview", "annual", period_end, ovp, {"endpoint": "OVERVIEW", "fetched_at": overview.get("fetched_at")})
+
+            inst.name = ovp.get("Name") or inst.name
+            inst.exchange = ovp.get("Exchange") or inst.exchange
+            inst.sector = ovp.get("Sector") or inst.sector
+            inst.industry = ovp.get("Industry") or inst.industry
+            inst.currency = ovp.get("Currency") or inst.currency
+            db.commit()
+
+        # Statements
+        income = client.get_income_statement(symbol)
+        bal = client.get_balance_sheet(symbol)
+        cash = client.get_cash_flow(symbol)
+
+        def store_statement(stmt: dict, statement_type: str):
+            p = stmt.get("payload") if isinstance(stmt, dict) else None
+            if not isinstance(p, dict):
+                return 0
+            count = 0
+            for freq_key, freq in [("annualReports", "annual"), ("quarterlyReports", "quarterly")]:
+                rows = p.get(freq_key)
+                if not isinstance(rows, list):
+                    continue
+                for r in rows:
+                    if not isinstance(r, dict):
+                        continue
+                    try:
+                        pe = date.fromisoformat(r.get("fiscalDateEnding")) if r.get("fiscalDateEnding") else None
+                    except Exception:
+                        pe = None
+                    if not pe:
+                        continue
+                    if upsert_fund(statement_type, freq, pe, r, {"endpoint": stmt.get("endpoint"), "fetched_at": stmt.get("fetched_at")}):
+                        count += 1
+            return count
+
+        f_income = store_statement(income, "income_statement")
+        f_bal = store_statement(bal, "balance_sheet")
+        f_cash = store_statement(cash, "cash_flow")
+
+        job.status = ProviderRefreshJobStatus.COMPLETED
+        job.completed_at = datetime.utcnow()
+        job.stats = {
+            "symbol": symbol,
+            "prices_inserted": inserted,
+            "prices_skipped": skipped,
+            "fundamentals_inserted": f_income + f_bal + f_cash,
+        }
+        db.commit()
+        return {"status": "completed", "request_key": request_key, **(job.stats or {})}
+
+    except Exception as e:
+        try:
+            job = db.query(ProviderRefreshJob).filter(ProviderRefreshJob.request_key == request_key).first()
+            if job:
+                job.status = ProviderRefreshJobStatus.FAILED
                 job.error_message = str(e) + "\n" + traceback.format_exc()
                 job.completed_at = datetime.utcnow()
                 db.commit()

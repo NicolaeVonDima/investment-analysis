@@ -58,3 +58,51 @@
 - Snapshots are append-only and should never be mutated in place.
 
 
+## 2025-12-13 — v1.2.0 — Alpha Vantage (Free Tier) + Composable Fetch Requests
+
+Source: [Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf](file://Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf)
+
+### Goals
+- Provide **UI-lite** data for company identity + latest price + freshness.
+- Provide a heavier **async backfill** operation to fetch/store:
+  - >= 5 years daily adjusted EOD prices
+  - fundamentals snapshots where available
+- Store immutable snapshots reused globally (not per user).
+- Keep Docker-first and cloud-ready.
+
+### Provider choice (MVP)
+- Provider: **Alpha Vantage** (free tier for now).
+- Constraint: **rate limited** free tier (must queue/cap calls, graceful stale behavior).
+
+### Composable fetch model
+- **Lite** endpoint:
+  - Serve from DB if present for today; else return last stored value with `stale=true`
+  - Queue a refresh task when stale/missing (best-effort)
+- **Backfill** endpoint:
+  - Async job that fetches multi-year daily adjusted series and fundamentals
+  - Idempotent: repeated calls do not create duplicates
+
+### Data model changes (MVP)
+- Add canonical instruments + provider symbol mapping:
+  - `instrument`
+  - `provider_symbol_map`
+- Store EOD prices:
+  - `price_eod` unique by `(instrument_id, as_of_date)`
+- Store fundamentals:
+  - `fundamentals_snapshot` unique by `(instrument_id, statement_type, period_end, frequency)`
+- Track provider work for idempotency/retry:
+  - `provider_refresh_jobs` (separate from watchlist refresh jobs)
+
+### Initial instruments (seed)
+- Load **ADBE** and **GOOGL** (allow **GOOG** alias mapping to the same instrument).
+
+### Acceptance criteria
+- UI-lite snapshot for ADBE and GOOGL shows:
+  - company identity
+  - latest price
+  - freshness/staleness
+- Backfill enqueues job; worker stores >=5y EOD history and fundamentals when available.
+- No duplicates on repeated runs (DB uniqueness + idempotent jobs).
+- Graceful degradation on provider limit (stale preserved; retries/backoff).
+- All stored data includes provider + retrieval metadata.
+

@@ -18,9 +18,9 @@ const PerformanceTab = ({ data, mockData, loading }) => {
   }
 
   const chartData = generateChartData()
-  const currentPrice = mockData?.currentPrice || 111.98
-  const change = mockData?.change || 15.76
-  const changePercent = mockData?.changePercent || 16.53
+  const currentPrice = mockData?.currentPrice
+  const change = mockData?.change
+  const changePercent = mockData?.changePercent
 
   const returnData = [
     { year: '2025', ytd: '4.66%', color: 'green' },
@@ -61,9 +61,13 @@ const PerformanceTab = ({ data, mockData, loading }) => {
     <div className="performance-tab">
       <div className="price-section">
         <div className="price-main">
-          <span className="price-value">${currentPrice.toFixed(2)}</span>
+          <span className="price-value">
+            {typeof currentPrice === 'number' ? `$${currentPrice.toFixed(2)}` : '—'}
+          </span>
           <span className={`price-change ${change >= 0 ? 'positive' : 'negative'}`}>
-            {change >= 0 ? '+' : ''}${change.toFixed(2)} ({changePercent.toFixed(2)}%)
+            {typeof change === 'number' && typeof changePercent === 'number'
+              ? `${change >= 0 ? '+' : ''}$${change.toFixed(2)} (${changePercent.toFixed(2)}%)`
+              : '—'}
           </span>
         </div>
         <div className="price-timestamp">

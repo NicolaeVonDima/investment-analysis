@@ -26,6 +26,7 @@ services:
     environment:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +44,7 @@ services:
     environment:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -64,6 +66,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       WATCHLIST_REFRESH_HOUR: "2"
       WATCHLIST_REFRESH_MINUTE: "0"
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

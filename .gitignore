@@ -21,6 +21,9 @@ build/
 .env
 .env.local
 
+# Local secrets (do not commit)
+config/*.secrets.env
+
 # IDE
 .vscode/
 .idea/

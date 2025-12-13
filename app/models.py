@@ -365,3 +365,151 @@ class RefreshJobItem(Base):
         Index("ix_refresh_job_items_job", "refresh_job_id"),
     )
 
+
+# ---------------------------------------------------------------------------
+# Instruments + provider-normalized market data (Alpha Vantage MVP)
+# ---------------------------------------------------------------------------
+
+
+class ProviderRefreshJobStatus(enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class Instrument(Base):
+    """Canonical instrument (one per unique company/security)."""
+
+    __tablename__ = "instruments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    canonical_symbol = Column(String(32), nullable=False, index=True, unique=True)
+
+    # Identity fields (populated from provider overview / cached identity)
+    name = Column(String(255), nullable=True)
+    exchange = Column(String(64), nullable=True)
+    sector = Column(String(128), nullable=True)
+    industry = Column(String(128), nullable=True)
+    currency = Column(String(16), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    symbol_maps = relationship("ProviderSymbolMap", back_populates="instrument", cascade="all, delete-orphan")
+    prices = relationship("PriceEOD", back_populates="instrument", cascade="all, delete-orphan")
+    fundamentals = relationship("FundamentalsSnapshot", back_populates="instrument", cascade="all, delete-orphan")
+
+
+class ProviderSymbolMap(Base):
+    """Maps provider-specific symbols/aliases to canonical Instrument."""
+
+    __tablename__ = "provider_symbol_map"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_symbol = Column(String(32), nullable=False, index=True)
+
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False, index=True)
+    is_primary = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument", back_populates="symbol_maps")
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_symbol", name="ux_provider_symbol_map_provider_symbol"),
+        Index("ix_provider_symbol_map_provider_instrument", "provider", "instrument_id"),
+    )
+
+
+class PriceEOD(Base):
+    """Immutable EOD price row (daily) per instrument."""
+
+    __tablename__ = "price_eod"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False, index=True)
+    as_of_date = Column(Date, nullable=False, index=True)
+
+    close = Column(Float, nullable=True)
+    adjusted_close = Column(Float, nullable=True)
+    volume = Column(Float, nullable=True)
+
+    provider = Column(String(64), nullable=False, default="alpha_vantage")
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    source_metadata = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument", back_populates="prices")
+
+    __table_args__ = (
+        UniqueConstraint("instrument_id", "as_of_date", name="ux_price_eod_instrument_date"),
+        Index("ix_price_eod_instrument_date_fetched", "instrument_id", "as_of_date", "fetched_at"),
+    )
+
+
+class FundamentalsSnapshot(Base):
+    """Immutable fundamentals snapshot per instrument/period."""
+
+    __tablename__ = "fundamentals_snapshot"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    statement_type = Column(String(64), nullable=False, index=True)  # overview|income_statement|balance_sheet|cash_flow
+    frequency = Column(String(16), nullable=False, default="annual", index=True)  # annual|quarterly
+    period_end = Column(Date, nullable=False, index=True)
+
+    provider = Column(String(64), nullable=False, default="alpha_vantage")
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    payload = Column(JSON, nullable=False)
+    source_metadata = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument", back_populates="fundamentals")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "statement_type",
+            "frequency",
+            "period_end",
+            name="ux_fundamentals_snapshot_key",
+        ),
+        Index("ix_fundamentals_snapshot_instrument_period", "instrument_id", "statement_type", "period_end"),
+    )
+
+
+class ProviderRefreshJob(Base):
+    """
+    Tracks provider work for idempotency, retry, and audit.
+
+    Uses a unique `request_key` so repeated calls can be de-duplicated safely.
+    """
+
+    __tablename__ = "provider_refresh_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(64), nullable=False, index=True, default="alpha_vantage")
+    job_type = Column(String(32), nullable=False, index=True)  # lite|backfill
+
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=True, index=True)
+    as_of_date = Column(Date, nullable=True, index=True)
+
+    request_key = Column(String(255), nullable=False, unique=True, index=True)
+    status = Column(SQLEnum(ProviderRefreshJobStatus), nullable=False, default=ProviderRefreshJobStatus.PENDING)
+
+    attempts = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    stats = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+

@@ -5,7 +5,7 @@ import './App.css'
 
 function App() {
   const [selectedNav, setSelectedNav] = useState('Browse')
-  const [selectedTicker, setSelectedTicker] = useState('AAPL')
+  const [selectedTicker, setSelectedTicker] = useState('ADBE')
 
   return (
     <div className="app">
