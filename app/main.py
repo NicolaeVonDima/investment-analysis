@@ -59,9 +59,11 @@ from app.api_schemas import (
     LiteSnapshotResponse,
     BackfillEnqueueResponse,
     BrowseLiteResponse,
+    PriceSeriesResponse,
+    PricePoint,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
-from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest
+from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
 from app.services.ticker_resolution import (
     SYMBOL_SEARCH_TTL,
     choose_best_match,
@@ -911,18 +913,20 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
     from app.services.alpha_vantage_client import AlphaVantageClient
 
     client = AlphaVantageClient()
-    attempts = 3
-    backoff = 1.0
+    # Keep browse-lite responsive and avoid burning provider credits:
+    # one attempt per request; caller can retry later and DB cache will absorb repeated hits.
+    attempts = 1
     last_exc = None
     for i in range(attempts):
         try:
-            daily = client.get_daily_adjusted_compact(inst.canonical_symbol)
+            # TIME_SERIES_DAILY_ADJUSTED is premium on some keys; use TIME_SERIES_DAILY for browse-lite.
+            daily = client.get_time_series_daily_compact(inst.canonical_symbol)
             payload = daily.get("payload") if isinstance(daily, dict) else None
             if not isinstance(payload, dict):
                 raise ValueError("Unexpected provider payload")
             parsed = parse_daily_adjusted_latest(payload)
             if not parsed:
-                raise ValueError("Unable to parse latest daily adjusted price")
+                raise ValueError("Unable to parse latest daily price")
 
             # insert (idempotent via unique constraint)
             existing = (
@@ -939,7 +943,7 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
                         adjusted_close=None,
                         volume=None,
                         provider="alpha_vantage",
-                        source_metadata={"endpoint": "TIME_SERIES_DAILY_ADJUSTED", "fetched_at": daily.get("fetched_at")},
+                        source_metadata={"endpoint": "TIME_SERIES_DAILY", "fetched_at": daily.get("fetched_at")},
                     )
                 )
                 db.commit()
@@ -970,8 +974,9 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
             # If key is missing, do not retry.
             if "ALPHAVANTAGE_API_KEY is not set" in str(e):
                 break
-            time.sleep(backoff)
-            backoff *= 2
+            # If provider is throttling / returning informational errors, don't retry.
+            if isinstance(e, RuntimeError):
+                break
 
     # Provider failure: return stale DB if available
     refresh.last_status = "failed"
@@ -1000,6 +1005,106 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
         last_status=refresh.last_status,
         last_error=refresh.last_error,
     )
+
+
+@app.get("/api/instruments/{ticker}/prices", response_model=PriceSeriesResponse)
+async def get_price_series(ticker: str, limit: int = 260, db: Session = Depends(get_db)):
+    """
+    Return a daily close series for charting.
+    - Prefer DB `price_eod` rows.
+    - If missing / stale, fetch TIME_SERIES_DAILY (compact) once and upsert missing rows (append-only).
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    mapping = (
+        db.query(ProviderSymbolMap)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == t)
+        .first()
+    )
+    inst = None
+    if mapping:
+        inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
+    if not inst:
+        inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+
+    lim = max(5, min(int(limit or 260), 800))
+    rows = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .limit(lim)
+        .all()
+    )
+    latest_date = rows[0].as_of_date if rows else None
+    today = datetime.utcnow().date()
+
+    should_refresh = (not rows) or (latest_date is not None and latest_date < today)
+    if should_refresh:
+        from app.services.alpha_vantage_client import AlphaVantageClient
+
+        try:
+            client = AlphaVantageClient()
+            daily = client.get_time_series_daily_compact(inst.canonical_symbol)
+            payload = daily.get("payload") if isinstance(daily, dict) else None
+            if not isinstance(payload, dict):
+                raise ValueError("Unexpected provider payload")
+
+            # Use provider series for response (even if DB has a conflicting row),
+            # to avoid stale/corrupted dev DB values masking correct upstream data.
+            series = parse_time_series_daily_closes(payload, limit=lim)
+            fetched_at = daily.get("fetched_at")
+
+            # Upsert missing days (append-only; uniqueness protects duplicates)
+            for d, close in series:
+                exists = (
+                    db.query(PriceEOD)
+                    .filter(PriceEOD.instrument_id == inst.id, PriceEOD.as_of_date == d)
+                    .first()
+                )
+                if exists:
+                    continue
+                db.add(
+                    PriceEOD(
+                        instrument_id=inst.id,
+                        as_of_date=d,
+                        close=close,
+                        adjusted_close=None,
+                        volume=None,
+                        provider="alpha_vantage",
+                        source_metadata={"endpoint": "TIME_SERIES_DAILY", "fetched_at": fetched_at},
+                    )
+                )
+            db.commit()
+
+            # Return provider series directly (ascending)
+            return PriceSeriesResponse(
+                ticker=inst.canonical_symbol,
+                instrument_id=inst.id,
+                points=[PricePoint(as_of_date=d, close=close) for d, close in series],
+            )
+        except Exception:
+            db.rollback()
+
+    # Re-read series for response (ascending)
+    rows = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .limit(lim)
+        .all()
+    )
+    # Collapse duplicates by date keeping newest fetched_at, then sort ascending
+    by_date = {}
+    for r in rows:
+        if r.as_of_date not in by_date:
+            by_date[r.as_of_date] = r
+    points = [PricePoint(as_of_date=d, close=by_date[d].close) for d in sorted(by_date.keys())]
+
+    return PriceSeriesResponse(ticker=inst.canonical_symbol, instrument_id=inst.id, points=points)
 
 
 @app.get("/api/instruments/{instrument_id}/snapshot/latest-lite", response_model=LiteSnapshotResponse)

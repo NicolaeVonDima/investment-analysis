@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, date
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 FRESH_TTL = timedelta(hours=24)
@@ -65,5 +65,36 @@ def parse_daily_adjusted_latest(payload: Dict[str, Any]) -> Optional[LitePrice]:
         change_pct = (latest_close - prev_close) / prev_close
 
     return LitePrice(as_of_date=latest_date, close=latest_close, change_pct=change_pct)
+
+
+def parse_time_series_daily_closes(payload: Dict[str, Any], limit: int = 260) -> List[Tuple[date, Optional[float]]]:
+    """
+    Extract a (date, close) series from Alpha Vantage TIME_SERIES_DAILY* payloads.
+    Returns dates ascending for charting.
+    """
+    ts = payload.get("Time Series (Daily)") if isinstance(payload, dict) else None
+    if not isinstance(ts, dict) or not ts:
+        return []
+
+    dates_desc = sorted(ts.keys(), reverse=True)
+    out_desc: List[Tuple[date, Optional[float]]] = []
+
+    for d_key in dates_desc[: max(0, int(limit))]:
+        try:
+            d = date.fromisoformat(d_key)
+        except Exception:
+            continue
+        row = ts.get(d_key)
+        if not isinstance(row, dict):
+            out_desc.append((d, None))
+            continue
+        v = row.get("4. close")
+        try:
+            close = float(v) if v is not None and v != "" else None
+        except Exception:
+            close = None
+        out_desc.append((d, close))
+
+    return list(reversed(out_desc))
 
 

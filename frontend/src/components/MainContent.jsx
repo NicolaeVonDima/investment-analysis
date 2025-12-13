@@ -15,6 +15,8 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   const [lite, setLite] = useState(null)
   const [liteLoading, setLiteLoading] = useState(false)
   const [liteError, setLiteError] = useState(null)
+  const [priceSeries, setPriceSeries] = useState(null)
+  const [priceSeriesError, setPriceSeriesError] = useState(null)
 
   const tabs = [
     'Key Data',
@@ -88,6 +90,22 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
     run()
   }, [ticker])
 
+  useEffect(() => {
+    // Price series for chart (DB-backed, may do one provider fetch if missing)
+    const run = async () => {
+      if (!ticker) return
+      setPriceSeriesError(null)
+      try {
+        const res = await axios.get(`${API_URL}/instruments/${encodeURIComponent(ticker)}/prices`, { params: { limit: 260 } })
+        setPriceSeries(res.data)
+      } catch (e) {
+        setPriceSeries(null)
+        setPriceSeriesError(e?.response?.data?.detail || e.message)
+      }
+    }
+    run()
+  }, [ticker])
+
   const addToWatchlist = async () => {
     if (!ticker) return
     setAddingToWatchlist(true)
@@ -113,12 +131,18 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
     instrument?.name ||
     (ticker ? `${ticker} Stock` : 'Unknown')
 
+  const seriesLatest = priceSeries?.points?.length ? priceSeries.points[priceSeries.points.length - 1] : null
+
   const mockData = {
     company: {
       name: companyName,
       ticker: ticker || 'IE00B4L5Y983'
     },
-    currentPrice: typeof lite?.close === 'number' ? lite.close : null,
+    // Prefer series (chart) last close to avoid showing stale/cached browse-lite values.
+    currentPrice:
+      typeof seriesLatest?.close === 'number'
+        ? seriesLatest.close
+        : (typeof lite?.close === 'number' ? lite.close : null),
     change: null,
     changePercent: typeof lite?.change_pct === 'number' ? lite.change_pct * 100 : null,
     rating: 4.72,
@@ -142,6 +166,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
           </div>
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
             {liteLoading ? 'Loading snapshot…' : liteError ? `Snapshot error: ${liteError}` : null}
+            {!liteLoading && !liteError && priceSeriesError ? <span>{` • Chart data error: ${priceSeriesError}`}</span> : null}
             {!liteLoading && !liteError && lite ? (
               <>
                 <span>{lite.stale ? 'Stale' : 'Fresh'}</span>
@@ -222,6 +247,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
             data={analysisData} 
             mockData={mockData}
             loading={loading}
+            priceSeries={priceSeries}
           />
         )}
         {selectedTab === 'Key Data' && (

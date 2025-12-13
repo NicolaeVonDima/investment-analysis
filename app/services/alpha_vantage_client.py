@@ -60,7 +60,8 @@ class AlphaVantageClient:
             return mock_response(fn, params)
         self._throttle()
         params = {**params, "apikey": self.config.api_key}
-        resp = self.session.get(self.config.base_url, params=params, timeout=30)
+        timeout_s = float(os.getenv("ALPHAVANTAGE_HTTP_TIMEOUT", "15"))
+        resp = self.session.get(self.config.base_url, params=params, timeout=timeout_s)
         self._last_call_ts = time.time()
         resp.raise_for_status()
         data = resp.json()
@@ -71,6 +72,9 @@ class AlphaVantageClient:
             if data.get("Note"):
                 # Common for rate limit responses
                 raise RuntimeError(data.get("Note"))
+            if data.get("Information"):
+                # Also used for throttling / premium endpoint notices
+                raise RuntimeError(data.get("Information"))
         return data
 
     def get_company_overview(self, symbol: str) -> Dict[str, Any]:
@@ -105,6 +109,23 @@ class AlphaVantageClient:
 
     def get_daily_adjusted_compact(self, symbol: str) -> Dict[str, Any]:
         return self.get_daily_adjusted(symbol, outputsize="compact")
+
+    def get_time_series_daily(self, symbol: str, outputsize: str = "full") -> Dict[str, Any]:
+        """
+        TIME_SERIES_DAILY (non-adjusted) is generally available on free tier.
+        Payload shape is compatible with browse-lite parsing (Time Series (Daily) / 4. close).
+        """
+        data = self._get({"function": "TIME_SERIES_DAILY", "symbol": symbol, "outputsize": outputsize})
+        return {
+            "provider": "alpha_vantage",
+            "endpoint": "TIME_SERIES_DAILY",
+            "symbol": symbol,
+            "fetched_at": datetime.utcnow().isoformat(),
+            "payload": data,
+        }
+
+    def get_time_series_daily_compact(self, symbol: str) -> Dict[str, Any]:
+        return self.get_time_series_daily(symbol, outputsize="compact")
 
     def get_income_statement(self, symbol: str) -> Dict[str, Any]:
         data = self._get({"function": "INCOME_STATEMENT", "symbol": symbol})

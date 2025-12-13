@@ -1,8 +1,8 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import './PerformanceTab.css'
 
-const PerformanceTab = ({ data, mockData, loading }) => {
+const PerformanceTab = ({ data, mockData, loading, priceSeries }) => {
   const [timeRange, setTimeRange] = useState('1Y')
   const [viewMode, setViewMode] = useState('Table')
 
@@ -13,18 +13,24 @@ const PerformanceTab = ({ data, mockData, loading }) => {
     return String(rounded)
   }
 
-  // Generate mock chart data
-  const generateChartData = () => {
-    const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb']
-    const basePrice = 95
-    return months.map((month, index) => ({
-      month,
-      price: basePrice + Math.random() * 25 + index * 1.5,
-      date: `Sept ${10 + index} 2024`
-    }))
-  }
+  const chartData = useMemo(() => {
+    const pts = priceSeries?.points
+    if (Array.isArray(pts) && pts.length) {
+      return pts
+        .filter((p) => p?.as_of_date && typeof p?.close === 'number')
+        .map((p) => ({ date: p.as_of_date, price: p.close }))
+    }
+    // Fallback: empty (avoid random floats that mask real data issues)
+    return []
+  }, [priceSeries])
 
-  const chartData = generateChartData()
+  const xTick = (v) => {
+    try {
+      return new Date(v).toLocaleDateString('en-US', { month: 'short' })
+    } catch {
+      return v
+    }
+  }
   const currentPrice = mockData?.currentPrice
   const change = mockData?.change
   const changePercent = mockData?.changePercent
@@ -78,7 +84,7 @@ const PerformanceTab = ({ data, mockData, loading }) => {
           </span>
         </div>
         <div className="price-timestamp">
-          As of {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} GMT 1+
+          As of {priceSeries?.points?.length ? priceSeries.points[priceSeries.points.length - 1]?.as_of_date : '—'} (EOD)
         </div>
       </div>
 
@@ -105,11 +111,11 @@ const PerformanceTab = ({ data, mockData, loading }) => {
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-              <XAxis dataKey="month" stroke="#666" />
-              <YAxis domain={[90, 120]} stroke="#666" tickFormatter={(v) => formatPrice(v)} />
+              <XAxis dataKey="date" stroke="#666" tickFormatter={xTick} />
+              <YAxis stroke="#666" tickFormatter={(v) => formatPrice(v)} />
               <Tooltip
                 formatter={(value, name) => [formatPrice(value), name]}
-                labelFormatter={(label) => `Month: ${label}`}
+                labelFormatter={(label) => `Date: ${label}`}
               />
               <Line 
                 type="monotone" 

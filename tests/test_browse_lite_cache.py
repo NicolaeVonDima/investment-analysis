@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone, date
 
-from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest
+from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
 from app.services.ticker_resolution import choose_best_match, normalize_query, valid_ticker_format
 
 
@@ -49,5 +49,19 @@ def test_choose_best_match_prefers_exact_symbol():
     assert best is not None
     assert (best.get("1. symbol") or "").upper() == "AAPL"
     assert "AAPL" in suggestions
+
+
+def test_parse_time_series_daily_closes_returns_ascending_series():
+    payload = {
+        "Time Series (Daily)": {
+            "2025-12-12": {"4. close": "100.0"},
+            "2025-12-11": {"4. close": "90.0"},
+        }
+    }
+    out = parse_time_series_daily_closes(payload, limit=10)
+    assert out[0][0].isoformat() == "2025-12-11"
+    assert out[0][1] == 90.0
+    assert out[-1][0].isoformat() == "2025-12-12"
+    assert out[-1][1] == 100.0
 
 

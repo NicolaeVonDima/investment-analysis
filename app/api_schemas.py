@@ -186,3 +186,14 @@ class BrowseLiteResponse(BaseModel):
     last_error: Optional[str] = None
 
 
+class PricePoint(BaseModel):
+    as_of_date: date
+    close: Optional[float] = None
+
+
+class PriceSeriesResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    points: List[PricePoint]
+
+

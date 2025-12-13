@@ -554,7 +554,7 @@ def refresh_instrument_lite(self, instrument_id: int):
 def backfill_instrument_data(self, instrument_id: int):
     """
     Heavy backfill:
-    - fetch TIME_SERIES_DAILY_ADJUSTED (full) and store >=5y daily rows in price_eod
+    - fetch TIME_SERIES_DAILY (full) and store >=5y daily rows in price_eod
     - fetch fundamentals statements and store immutable snapshots
     - idempotent via uniqueness constraints + ProviderRefreshJob request_key
     """
@@ -604,12 +604,12 @@ def backfill_instrument_data(self, instrument_id: int):
 
         client = AlphaVantageClient()
 
-        # Prices
-        daily = client.get_daily_adjusted(symbol)
+        # Prices (TIME_SERIES_DAILY is broadly available; adjusted endpoints may be premium)
+        daily = client.get_time_series_daily(symbol)
         payload = daily.get("payload") if isinstance(daily, dict) else None
         ts = payload.get("Time Series (Daily)") if isinstance(payload, dict) else None
         if not isinstance(ts, dict):
-            raise ValueError("Unexpected TIME_SERIES_DAILY_ADJUSTED payload")
+            raise ValueError("Unexpected TIME_SERIES_DAILY payload")
 
         today = datetime.utcnow().date()
         cutoff = _years_ago_safe(today, 5)
@@ -627,8 +627,8 @@ def backfill_instrument_data(self, instrument_id: int):
                 continue
             try:
                 close = float(row.get("4. close")) if row.get("4. close") else None
-                adj = float(row.get("5. adjusted close")) if row.get("5. adjusted close") else None
-                vol = float(row.get("6. volume")) if row.get("6. volume") else None
+                adj = None
+                vol = float(row.get("5. volume")) if row.get("5. volume") else None
             except Exception:
                 close, adj, vol = None, None, None
 
@@ -644,7 +644,7 @@ def backfill_instrument_data(self, instrument_id: int):
                     adjusted_close=adj,
                     volume=vol,
                     provider="alpha_vantage",
-                    source_metadata={"endpoint": "TIME_SERIES_DAILY_ADJUSTED", "fetched_at": daily.get("fetched_at")},
+                    source_metadata={"endpoint": "TIME_SERIES_DAILY", "fetched_at": daily.get("fetched_at")},
                 )
             )
             try:
