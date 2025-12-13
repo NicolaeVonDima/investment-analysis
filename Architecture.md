@@ -77,3 +77,21 @@ Source: [Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf](file://Spec_Ticker
 - UI uses `/browse/:ticker` route and the sidebar search navigates there.
 - Browse view calls `GET /api/instruments/{ticker}/browse-lite`.
 
+
+## 2025-12-13 — v1.4.0 — Ticker validation + browse guard
+
+Source: [Spec_Ticker_Search_Validation_and_Browse_Guard.pdf](file://Spec_Ticker_Search_Validation_and_Browse_Guard.pdf)
+
+### Resolution sources
+- **db**: exact instrument match
+- **alias**: provider/alias mapping (`provider_symbol_map`)
+- **provider**: Alpha Vantage `SYMBOL_SEARCH` (cached)
+
+### Guarding invariants
+- Invalid/unresolvable tickers must not:
+  - create `instruments` rows, or
+  - trigger browse-lite/provider refresh paths.
+
+### Caching
+- Provider symbol search results cached in DB for 24h to reduce calls.
+

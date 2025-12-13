@@ -128,6 +128,16 @@ class AlphaVantageClient:
             "payload": data,
         }
 
+    def symbol_search(self, keywords: str) -> Dict[str, Any]:
+        data = self._get({"function": "SYMBOL_SEARCH", "keywords": keywords})
+        return {
+            "provider": "alpha_vantage",
+            "endpoint": "SYMBOL_SEARCH",
+            "keywords": keywords,
+            "fetched_at": datetime.utcnow().isoformat(),
+            "payload": data,
+        }
+
 
 def parse_global_quote_price(global_quote_payload: Dict[str, Any]) -> Dict[str, Any]:
     """

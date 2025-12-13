@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone, date
 
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest
+from app.services.ticker_resolution import choose_best_match, normalize_query, valid_ticker_format
 
 
 def test_is_fresh_true_within_24h():
@@ -27,5 +28,26 @@ def test_parse_daily_adjusted_latest_extracts_latest_close_and_change_pct():
     assert out.as_of_date == date(2025, 12, 12)
     assert out.close == 110.0
     assert abs(out.change_pct - 0.10) < 1e-9
+
+
+def test_valid_ticker_format_and_normalize():
+    assert normalize_query(" goog ") == "GOOG"
+    assert valid_ticker_format("AAPL") is True
+    assert valid_ticker_format("BRK.B") is True
+    assert valid_ticker_format("RDS-A") is True
+    assert valid_ticker_format("AAPL!") is False
+    assert valid_ticker_format("") is False
+
+
+def test_choose_best_match_prefers_exact_symbol():
+    query = "AAPL"
+    matches = [
+        {"1. symbol": "AAP", "4. region": "United States", "9. matchScore": "0.90"},
+        {"1. symbol": "AAPL", "4. region": "United States", "9. matchScore": "0.10"},
+    ]
+    best, suggestions = choose_best_match(query, matches)
+    assert best is not None
+    assert (best.get("1. symbol") or "").upper() == "AAPL"
+    assert "AAPL" in suggestions
 
 

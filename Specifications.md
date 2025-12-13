@@ -141,3 +141,36 @@ Source: [Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf](file://Spec_Ticker
 - `price_eod` uniqueness prevents duplicate daily rows.
 - Refresh timestamp updates are atomic with successful provider fetch.
 
+
+## 2025-12-13 — v1.4.0 — Validate Ticker Search + Prevent Navigating to Browse for Invalid Symbols
+
+Source: [Spec_Ticker_Search_Validation_and_Browse_Guard.pdf](file://Spec_Ticker_Search_Validation_and_Browse_Guard.pdf)
+
+### Objective
+- Search validates ticker and **only navigates** to `/browse/{ticker}` if resolvable.
+- `/browse/{ticker}` is guarded (deep links do not load data or create DB rows for invalid tickers).
+
+### Validation rules (MVP)
+- Normalize input: trim + uppercase.
+- Reject invalid format (MVP allow: A–Z, 0–9, `.`, `-`).
+- Resolve order:
+  1) `instruments.canonical_symbol` exact match
+  2) `provider_symbol_map` match
+  3) Alpha Vantage `SYMBOL_SEARCH` (rate-limited)
+- Best-match selection:
+  - prefer exact symbol match to query
+  - else pick highest score among US-region results (MVP)
+
+### Persistence rules
+- **Do not create** instruments for invalid tickers or not-found results.
+- Only upsert instrument/provider mappings after successful resolution.
+- Persist successful provider resolutions into `provider_symbol_map` with `last_verified_at`.
+- Cache provider search results for short TTL (24h) to reduce calls.
+
+### UX requirements
+- Search submit calls resolve.
+  - success: navigate to canonical ticker returned by backend
+  - failure: stay put and show inline error; optionally show clickable suggestions
+- Browse route guard:
+  - resolve first → if fail show Not Found UI → do not call browse-lite
+

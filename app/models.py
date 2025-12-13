@@ -412,6 +412,7 @@ class ProviderSymbolMap(Base):
 
     instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False, index=True)
     is_primary = Column(Boolean, nullable=False, default=True)
+    last_verified_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -420,6 +421,26 @@ class ProviderSymbolMap(Base):
     __table_args__ = (
         UniqueConstraint("provider", "provider_symbol", name="ux_provider_symbol_map_provider_symbol"),
         Index("ix_provider_symbol_map_provider_instrument", "provider", "instrument_id"),
+    )
+
+
+class ProviderSymbolSearchCache(Base):
+    """
+    Cache provider symbol search results to reduce calls (24h TTL enforced in code).
+    """
+
+    __tablename__ = "provider_symbol_search_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(64), nullable=False, index=True, default="alpha_vantage")
+    query = Column(String(64), nullable=False, index=True)
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    payload = Column(JSON, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "query", name="ux_provider_symbol_search_cache_provider_query"),
+        Index("ix_provider_symbol_search_cache_provider_fetched", "provider", "fetched_at"),
     )
 
 

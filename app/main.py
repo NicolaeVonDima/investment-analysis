@@ -13,6 +13,7 @@ from datetime import datetime
 from datetime import date as date_type
 import zlib
 import time
+import logging
 from sqlalchemy import text
 
 from app.database import get_db, init_db
@@ -31,6 +32,7 @@ from app.models import (
     RefreshJob,
     Instrument,
     ProviderSymbolMap,
+    ProviderSymbolSearchCache,
     PriceEOD,
     InstrumentRefresh,
 )
@@ -51,12 +53,23 @@ from app.api_schemas import (
     RefreshStatusResponse,
     ResolveInstrumentRequest,
     InstrumentResponse,
+    ResolveInstrumentSuccessResponse,
+    ResolveInstrumentErrorResponse,
     LiteSnapshotResponse,
     BackfillEnqueueResponse,
     BrowseLiteResponse,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest
+from app.services.ticker_resolution import (
+    SYMBOL_SEARCH_TTL,
+    choose_best_match,
+    normalize_query,
+    parse_symbol_search_matches,
+    valid_ticker_format,
+)
+
+logger = logging.getLogger("app.ticker_resolution")
 
 app = FastAPI(
     title="Investment Analysis Platform",
@@ -557,74 +570,247 @@ async def get_watchlist_config():
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/instruments/resolve", response_model=InstrumentResponse)
+@app.post("/api/instruments/resolve", response_model=ResolveInstrumentSuccessResponse)
 async def resolve_instrument(request: ResolveInstrumentRequest):
     """
     Resolve an input symbol to a canonical instrument.
-    Prefer provider symbol maps; otherwise create a new instrument using the symbol as canonical.
+    Prefer DB/provider maps; otherwise use provider SYMBOL_SEARCH.
+    Must NOT create instruments for invalid or not-found tickers.
     """
     db = next(get_db())
-    raw = (request.symbol or request.query or "").upper().strip()
-    if not raw:
-        raise HTTPException(status_code=400, detail="symbol/query is required")
-    symbol = raw
-    if not symbol.replace(".", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=400, detail="Invalid symbol format")
+    raw = request.query or request.symbol or ""
+    q = normalize_query(raw)
+    t0 = time.perf_counter()
+    provider_calls = 0
+    if not q:
+        logger.info("resolve", extra={"query": raw, "outcome": "invalid_format", "provider_calls": 0, "latency_ms": int((time.perf_counter() - t0) * 1000)})
+        raise HTTPException(
+            status_code=422,
+            detail=ResolveInstrumentErrorResponse(
+                error_code="INVALID_FORMAT", message="Ticker is required"
+            ).model_dump(),
+        )
+    if not valid_ticker_format(q):
+        logger.info("resolve", extra={"query": q, "outcome": "invalid_format", "provider_calls": 0, "latency_ms": int((time.perf_counter() - t0) * 1000)})
+        raise HTTPException(
+            status_code=422,
+            detail=ResolveInstrumentErrorResponse(
+                error_code="INVALID_FORMAT", message="Invalid ticker format"
+            ).model_dump(),
+        )
 
+    # (1) DB exact match
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == q).first()
+    if inst:
+        # best-effort provider symbol
+        primary = (
+            db.query(ProviderSymbolMap)
+            .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.instrument_id == inst.id)
+            .order_by(ProviderSymbolMap.is_primary.desc(), ProviderSymbolMap.id.asc())
+            .first()
+        )
+        logger.info(
+            "resolve",
+            extra={
+                "query": q,
+                "outcome": "success",
+                "source": "db",
+                "provider_calls": 0,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+            },
+        )
+        return ResolveInstrumentSuccessResponse(
+            instrument_id=inst.id,
+            ticker=inst.canonical_symbol,
+            provider_symbol=(primary.provider_symbol if primary else inst.canonical_symbol),
+            name=inst.name,
+            exchange=inst.exchange,
+            currency=inst.currency,
+            resolution_source="db",
+        )
+
+    # (2) alias/provider map
     mapping = (
         db.query(ProviderSymbolMap)
-        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == symbol)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == q)
         .first()
     )
     if mapping:
         inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
         if not inst:
-            raise HTTPException(status_code=404, detail="Instrument not found")
-        return InstrumentResponse(
-            id=inst.id,
-            canonical_symbol=inst.canonical_symbol,
+            logger.info(
+                "resolve",
+                extra={
+                    "query": q,
+                    "outcome": "not_found",
+                    "source": "alias",
+                    "provider_calls": 0,
+                    "latency_ms": int((time.perf_counter() - t0) * 1000),
+                },
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=ResolveInstrumentErrorResponse(
+                    error_code="TICKER_NOT_FOUND", message="Ticker not found"
+                ).model_dump(),
+            )
+        logger.info(
+            "resolve",
+            extra={
+                "query": q,
+                "outcome": "success",
+                "source": "alias",
+                "provider_calls": 0,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+            },
+        )
+        return ResolveInstrumentSuccessResponse(
+            instrument_id=inst.id,
+            ticker=inst.canonical_symbol,
+            provider_symbol=mapping.provider_symbol,
             name=inst.name,
             exchange=inst.exchange,
-            sector=inst.sector,
-            industry=inst.industry,
             currency=inst.currency,
+            resolution_source="alias",
         )
 
-    inst = db.query(Instrument).filter(Instrument.canonical_symbol == symbol).first()
+    # (3) provider symbol search with 24h cache
+    now = datetime.utcnow()
+    cache = (
+        db.query(ProviderSymbolSearchCache)
+        .filter(ProviderSymbolSearchCache.provider == "alpha_vantage", ProviderSymbolSearchCache.query == q)
+        .first()
+    )
+    payload = None
+    if cache and cache.fetched_at and (now - cache.fetched_at) < SYMBOL_SEARCH_TTL:
+        payload = cache.payload
+    else:
+        from app.services.alpha_vantage_client import AlphaVantageClient
+
+        try:
+            client = AlphaVantageClient()
+            provider_calls = 1
+            resp = client.symbol_search(q)
+            payload = resp.get("payload") if isinstance(resp, dict) else None
+            if not isinstance(payload, dict):
+                raise ValueError("Unexpected provider response")
+
+            if cache:
+                cache.payload = payload
+                cache.fetched_at = now
+            else:
+                cache = ProviderSymbolSearchCache(provider="alpha_vantage", query=q, payload=payload)
+                db.add(cache)
+            db.commit()
+        except Exception as e:
+            logger.warning(
+                "resolve",
+                extra={
+                    "query": q,
+                    "outcome": "provider_error",
+                    "provider_calls": provider_calls,
+                    "latency_ms": int((time.perf_counter() - t0) * 1000),
+                },
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=ResolveInstrumentErrorResponse(
+                    error_code="PROVIDER_ERROR", message=str(e)
+                ).model_dump(),
+            )
+
+    matches = parse_symbol_search_matches(payload or {})
+    best, suggestions = choose_best_match(q, matches)
+    if not best:
+        logger.info(
+            "resolve",
+            extra={
+                "query": q,
+                "outcome": "not_found",
+                "source": "provider",
+                "provider_calls": provider_calls,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+            },
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=ResolveInstrumentErrorResponse(
+                error_code="TICKER_NOT_FOUND", message="Ticker not found", suggestions=suggestions
+            ).model_dump(),
+        )
+
+    best_symbol = (best.get("1. symbol") or "").upper().strip()
+    best_name = best.get("2. name")
+    best_region = best.get("4. region")
+    best_currency = best.get("8. currency")
+
+    if not best_symbol:
+        logger.info(
+            "resolve",
+            extra={
+                "query": q,
+                "outcome": "not_found",
+                "source": "provider",
+                "provider_calls": provider_calls,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+            },
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=ResolveInstrumentErrorResponse(
+                error_code="TICKER_NOT_FOUND", message="Ticker not found", suggestions=suggestions
+            ).model_dump(),
+        )
+
+    # Upsert instrument after successful provider resolution.
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == best_symbol).first()
     if not inst:
-        inst = Instrument(canonical_symbol=symbol)
+        inst = Instrument(canonical_symbol=best_symbol, name=best_name, exchange=best_region, currency=best_currency)
         db.add(inst)
         db.commit()
         db.refresh(inst)
+    else:
+        inst.name = inst.name or best_name
+        inst.exchange = inst.exchange or best_region
+        inst.currency = inst.currency or best_currency
+        db.commit()
 
-    # Ensure provider map exists (best-effort)
-    try:
-        existing = (
+    # Upsert provider symbol mapping for best symbol
+    def upsert_map(sym: str, is_primary: bool):
+        row = (
             db.query(ProviderSymbolMap)
-            .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == symbol)
+            .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == sym)
             .first()
         )
-        if not existing:
-            db.add(
-                ProviderSymbolMap(
-                    provider="alpha_vantage",
-                    provider_symbol=symbol,
-                    instrument_id=inst.id,
-                    is_primary=True,
-                )
-            )
+        if row:
+            row.instrument_id = inst.id
+            row.is_primary = row.is_primary or is_primary
+            row.last_verified_at = now
             db.commit()
-    except Exception:
-        db.rollback()
+            return row
+        row = ProviderSymbolMap(
+            provider="alpha_vantage",
+            provider_symbol=sym,
+            instrument_id=inst.id,
+            is_primary=is_primary,
+            last_verified_at=now,
+        )
+        db.add(row)
+        db.commit()
+        return row
 
-    return InstrumentResponse(
-        id=inst.id,
-        canonical_symbol=inst.canonical_symbol,
+    best_map = upsert_map(best_symbol, True)
+    if q != best_symbol:
+        upsert_map(q, False)
+
+    return ResolveInstrumentSuccessResponse(
+        instrument_id=inst.id,
+        ticker=inst.canonical_symbol,
+        provider_symbol=best_map.provider_symbol,
         name=inst.name,
         exchange=inst.exchange,
-        sector=inst.sector,
-        industry=inst.industry,
         currency=inst.currency,
+        resolution_source="provider",
     )
 
 
@@ -661,7 +847,7 @@ async def browse_lite(ticker: str):
     if not t.replace(".", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid ticker format")
 
-    # Resolve / create instrument (reuse existing resolve behavior via provider map)
+    # Resolve instrument; must NOT create instrument rows for unknown tickers.
     mapping = (
         db.query(ProviderSymbolMap)
         .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == t)
@@ -673,23 +859,7 @@ async def browse_lite(ticker: str):
     if not inst:
         inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
     if not inst:
-        inst = Instrument(canonical_symbol=t)
-        db.add(inst)
-        db.commit()
-        db.refresh(inst)
-        # create provider map best-effort
-        try:
-            db.add(
-                ProviderSymbolMap(
-                    provider="alpha_vantage",
-                    provider_symbol=t,
-                    instrument_id=inst.id,
-                    is_primary=True,
-                )
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        raise HTTPException(status_code=404, detail="Ticker not found")
 
     now = datetime.utcnow()
     refresh = db.query(InstrumentRefresh).filter(InstrumentRefresh.instrument_id == inst.id).first()

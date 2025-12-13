@@ -75,4 +75,24 @@ Browse-lite needs a deterministic freshness rule independent of UI sessions, and
 - Simple and explicit cache TTL behavior.
 - Allows graceful provider failure (serve stale DB if available while recording `last_error`).
 
+## 2025-12-13 — ADR-0004 — Strict ticker resolution + guard (no DB rows for invalid symbols)
+
+Source: [Spec_Ticker_Search_Validation_and_Browse_Guard.pdf](file://Spec_Ticker_Search_Validation_and_Browse_Guard.pdf)
+
+### Decision
+Make ticker resolution strict and explicit:
+- `/api/instruments/resolve` returns **success** only when the ticker is resolvable from:
+  - local instruments, or
+  - local provider/alias maps, or
+  - Alpha Vantage `SYMBOL_SEARCH` (cached).
+- Invalid/not-found tickers return an error response and **do not create** `instruments` rows.
+
+### Context
+We must prevent nonsense tickers from navigating to Browse and from polluting the database with invalid instruments.
+
+### Consequences
+- UI can block navigation and show errors/suggestions.
+- Deep links to `/browse/{ticker}` are safe because the route resolves first and browse-lite will not create rows.
+- Successful provider resolutions are cached and persisted into `provider_symbol_map` with `last_verified_at`.
+
 

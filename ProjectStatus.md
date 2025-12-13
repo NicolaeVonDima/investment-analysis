@@ -61,4 +61,19 @@
 ### Tests
 - `pytest`: PASS
 
+## 2025-12-13 — Status Update (v1.4.0 validation + browse guard)
+
+### Done
+- Search now validates tickers via `POST /api/instruments/resolve` before navigating.
+- Invalid tickers show an inline error and do not navigate.
+- `/browse/:ticker` is guarded: invalid deep links show Not Found and do not call browse-lite.
+- Backend no longer creates instruments in browse-lite for unknown tickers.
+- Added provider symbol search caching (24h) and `last_verified_at` on provider symbol maps.
+
+### Tests
+- `pytest`: PASS
+
+### Notes
+- Existing Postgres installs are upgraded best-effort on startup via `init_db()` DDL for v1.4.0 tables/columns (no Alembic yet).
+
 

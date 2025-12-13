@@ -122,6 +122,22 @@ class ResolveInstrumentRequest(BaseModel):
     query: Optional[str] = Field(None, min_length=1, max_length=32)
 
 
+class ResolveInstrumentSuccessResponse(BaseModel):
+    instrument_id: int
+    ticker: str
+    provider_symbol: str
+    name: Optional[str] = None
+    exchange: Optional[str] = None
+    currency: Optional[str] = None
+    resolution_source: str  # db|alias|provider
+
+
+class ResolveInstrumentErrorResponse(BaseModel):
+    error_code: str  # INVALID_FORMAT|TICKER_NOT_FOUND|PROVIDER_ERROR
+    message: str
+    suggestions: Optional[list[str]] = None
+
+
 class InstrumentResponse(BaseModel):
     id: int
     canonical_symbol: str

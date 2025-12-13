@@ -1,11 +1,18 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import './Sidebar.css'
 
 const Sidebar = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchError, setSearchError] = useState(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+
+  const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
+  const API_URL = `${API_ROOT}/api`
 
   const navItems = [
     { id: 'Home', icon: '🏠', label: 'Home' },
@@ -16,10 +23,24 @@ const Sidebar = () => {
     { id: 'Articles', icon: '📄', label: 'Articles' },
   ]
 
-  const handleSearch = (e) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      const t = searchQuery.toUpperCase().trim()
-      navigate(`/browse/${encodeURIComponent(t)}`)
+  const handleSearch = async (e) => {
+    if (e.key !== 'Enter') return
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearchLoading(true)
+    setSearchError(null)
+    setSuggestions([])
+    try {
+      const res = await axios.post(`${API_URL}/instruments/resolve`, { query: q })
+      const ticker = res.data?.ticker || q.toUpperCase()
+      navigate(`/browse/${encodeURIComponent(ticker)}`)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      const msg = detail?.message || 'Ticker not found'
+      setSearchError(msg)
+      setSuggestions(detail?.suggestions || [])
+    } finally {
+      setSearchLoading(false)
     }
   }
 
@@ -45,10 +66,41 @@ const Sidebar = () => {
           placeholder="Q Search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleSearch}
+          onKeyDown={handleSearch}
+          disabled={searchLoading}
         />
         <span className="search-placeholder">/</span>
       </div>
+      {searchError && (
+        <div style={{ padding: '0 16px 8px 16px', color: '#b91c1c', fontSize: 12 }}>
+          {searchError}
+          {!!suggestions.length && (
+            <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  style={{
+                    border: '1px solid #fecaca',
+                    background: '#fff5f5',
+                    borderRadius: 999,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                  onClick={() => {
+                    setSearchQuery(s)
+                    setSearchError(null)
+                    setSuggestions([])
+                    navigate(`/browse/${encodeURIComponent(s)}`)
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <nav className="sidebar-nav">
         {navItems.map((item) => (
