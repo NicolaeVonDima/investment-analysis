@@ -276,6 +276,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
             loading={loading}
             priceSeries={priceSeries}
             overview={overview}
+            ticker={ticker}
           />
         )}
         {selectedTab === 'Key Data' && (

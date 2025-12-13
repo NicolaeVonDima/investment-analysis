@@ -236,3 +236,23 @@ class OverviewResponse(BaseModel):
     datasets: List[OverviewDatasetStatus] = []
 
 
+# ---------------------------------------------------------------------------
+# Fundamentals multi-series (chart overlays)
+# ---------------------------------------------------------------------------
+
+
+class FundamentalsSeriesPoint(BaseModel):
+    period_end: date
+    value: Optional[float] = None
+
+
+class FundamentalsSeriesResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    period: str  # quarterly|annual
+    currency: Optional[str] = None
+    as_of: Optional[date] = None
+    series: Dict[str, List[FundamentalsSeriesPoint]] = {}
+    unavailable: List[str] = []
+
+

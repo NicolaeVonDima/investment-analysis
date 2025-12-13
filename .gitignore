@@ -23,6 +23,7 @@ build/
 
 # Local secrets (do not commit)
 config/*.secrets.env
+.agents/
 
 # IDE
 .vscode/

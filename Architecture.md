@@ -115,3 +115,15 @@ Source: [Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf](file://Spec_Overview_Tab_
 - Track refresh by dataset type (e.g., fundamentals_quarterly / fundamentals_annual) to avoid repeated provider calls.
 - Serve partial data when provider errors occur; UI shows per-panel warnings.
 
+
+## 2025-12-13 — v1.6.0 — Fundamentals multi-series endpoint (chart overlays)
+
+Source: [Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf](file://Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf)
+
+### Endpoint
+- Add `GET /api/instruments/{ticker}/fundamentals/series` returning aligned multi-series values for a given period (quarterly/annual).
+
+### Data flow
+- DB-first: read from `fundamentals_snapshot` when fundamentals refresh is < 24h.
+- Otherwise: refresh fundamentals bundle (CF/IS/BS) once, persist immutable snapshots, then compute aligned series.
+

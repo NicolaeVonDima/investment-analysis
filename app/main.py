@@ -66,6 +66,8 @@ from app.api_schemas import (
     OverviewDatasetStatus,
     OverviewFcfPoint,
     OverviewKpiPoint,
+    FundamentalsSeriesResponse,
+    FundamentalsSeriesPoint,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
@@ -75,6 +77,7 @@ from app.services.overview import (
     load_fundamentals_snapshots,
     refresh_fundamentals_bundle,
 )
+from app.services.fundamentals_series import ALLOWED_SERIES, compute_fundamentals_series
 from app.services.ticker_resolution import (
     SYMBOL_SEARCH_TTL,
     choose_best_match,
@@ -1224,6 +1227,88 @@ async def get_overview(ticker: str, db: Session = Depends(get_db)):
             for p in a_kpis
         ],
         datasets=[ds_status("fundamentals_quarterly", q_meta), ds_status("fundamentals_annual", a_meta)],
+    )
+
+
+@app.get("/api/instruments/{ticker}/fundamentals/series", response_model=FundamentalsSeriesResponse)
+async def get_fundamentals_series(
+    ticker: str,
+    period: str = "quarterly",
+    series: str = "fcf",
+    db: Session = Depends(get_db),
+):
+    """
+    Return aligned fundamentals series for overlay charting.
+    - period: quarterly|annual
+    - series: comma-separated list, e.g. fcf,sbc,netIncome,debt,dividends,buybacks
+    Uses 24h DB-first caching via InstrumentDatasetRefresh (fundamentals_quarterly/fundamentals_annual).
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    p = (period or "").strip().lower()
+    if p not in ("quarterly", "annual"):
+        raise HTTPException(status_code=422, detail="period must be quarterly or annual")
+
+    requested = [s.strip() for s in (series or "").split(",") if s.strip()]
+    requested = [s for s in requested if s in ALLOWED_SERIES]
+    if not requested:
+        raise HTTPException(status_code=422, detail="No valid series requested")
+
+    mapping = (
+        db.query(ProviderSymbolMap)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == t)
+        .first()
+    )
+    inst = None
+    if mapping:
+        inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
+    if not inst:
+        inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+
+    now = datetime.utcnow()
+
+    from app.services.alpha_vantage_client import AlphaVantageClient
+
+    client = AlphaVantageClient()
+
+    def fetch_all():
+        return {
+            "cash_flow": client.get_cash_flow(inst.canonical_symbol),
+            "income_statement": client.get_income_statement(inst.canonical_symbol),
+            "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
+        }
+
+    # Refresh both quarterly and annual together to avoid duplicate provider calls.
+    refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+
+    # Load snapshots for requested period
+    freq = "quarterly" if p == "quarterly" else "annual"
+    lim = 12 if freq == "quarterly" else 10
+    cf = load_fundamentals_snapshots(db, inst.id, "cash_flow", freq, limit=lim)
+    inc = load_fundamentals_snapshots(db, inst.id, "income_statement", freq, limit=lim)
+    bs = load_fundamentals_snapshots(db, inst.id, "balance_sheet", freq, limit=lim)
+
+    bundle = compute_fundamentals_series(cash_flows=cf, incomes=inc, balances=bs, requested=requested)
+
+    # Use instrument currency if present (Alpha Vantage statements do not always carry it).
+    currency = inst.currency
+
+    out_series = {
+        k: [FundamentalsSeriesPoint(period_end=d, value=v) for (d, v) in pts]
+        for k, pts in bundle.series.items()
+    }
+    return FundamentalsSeriesResponse(
+        ticker=inst.canonical_symbol,
+        instrument_id=inst.id,
+        period=p,
+        currency=currency,
+        as_of=bundle.as_of,
+        series=out_series,
+        unavailable=bundle.unavailable,
     )
 
 

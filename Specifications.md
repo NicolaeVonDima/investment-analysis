@@ -200,3 +200,41 @@ Source: [Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf](file://Spec_Overview_Tab_
 - DB-first: if refreshed within 24h per dataset type, serve from DB and do not call provider.
 - If stale/missing: call provider, persist immutable snapshots, return updated view.
 
+
+## 2025-12-13 — v1.6.0 — Multi-KPI Overlay Chart in FCF Container (Toggle Lines) + Remove Table
+
+Source: [Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf](file://Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf)
+
+### Objective
+- Enhance the FCF chart to support **multiple KPI lines** on one time axis with click-to-toggle visibility.
+- Remove the table beneath the chart (chart-only view).
+
+### KPI series (v1)
+- `fcf` (operating cash flow - capex)
+- `sbc` (stock-based compensation, if available)
+- `netIncome`
+- `debt` (total debt or short+long term debt)
+- `dividends` (abs cash spent)
+- `buybacks` (abs cash spent)
+
+### API
+- `GET /api/instruments/{ticker}/fundamentals/series?period=quarterly|annual&series=fcf,sbc,netIncome,debt,dividends,buybacks`
+- Response returns aligned series; missing series are omitted/marked unavailable (no fabricated values).
+
+### Refresh policy
+- Reuse fundamentals refresh tracking: DB-first within 24h, otherwise provider fetch and snapshot persistence.
+
+
+## 2025-12-13 — v1.6.1 — Overview layout: price + FCF on same row, improve price chart ticks
+
+### Objective
+- Place **FCF multi-series chart** on the **same row** as the **price chart** in Overview for better comparability.
+- Fix price chart axis rendering for daily data (avoid repeated month tick labels).
+
+
+## 2025-12-13 — v1.6.2 — Overview: KPI chart with toggles + 3-up layout
+
+### Objective
+- Move **Valuation / Quality KPIs** onto the same row as **Price** and **FCF** on wide screens.
+- Replace KPI table with a **multi-line KPI chart** and **toggle chips** (like the FCF panel).
+

@@ -99,4 +99,21 @@
 ### Tests
 - `pytest`: PASS
 
+## 2025-12-13 — Status Update (v1.6.0 multi-series FCF chart)
+
+### Current focus
+- Add multi-series fundamentals endpoint + UI toggleable overlays (FCF + selected KPIs) and remove the table under the chart.
+
+## 2025-12-13 — Status Update (v1.6.1 Overview layout tweaks)
+
+### Done
+- Fixed price chart X-axis tick formatting for daily series.
+- Moved FCF overlay chart to the same row as the price chart (responsive layout).
+
+## 2025-12-13 — Status Update (v1.6.2 KPI chart + 3-up layout)
+
+### Done
+- Replaced KPI table with a toggleable multi-line KPI chart (percent series + Debt/Equity).
+- Overview grid now supports 3-up cards (Price + FCF + KPIs) on wide screens.
+
 

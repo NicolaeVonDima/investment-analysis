@@ -122,3 +122,19 @@ Overview composes multiple datasets with different refresh cadences and failure 
 - Alpha Vantage endpoint availability varies by key/tier; for price history we default to free-tier compatible daily series endpoints in the UI layer.
 
 
+## 2025-12-13 — ADR-0006 — Add fundamentals multi-series endpoint for chart overlays
+
+Source: [Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf](file://Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf)
+
+### Decision
+Expose a dedicated endpoint that returns aligned multi-series fundamentals for charting:
+- `GET /api/instruments/{ticker}/fundamentals/series`
+
+### Context
+The Overview UI needs multiple KPI lines (FCF + additional KPIs) over the same time axis with toggle controls, without duplicating computation logic in the frontend.
+
+### Consequences
+- Keeps mapping logic centralized (statement field names + sign conventions).
+- Allows DB-first 24h caching via existing fundamentals refresh tracking.
+
+

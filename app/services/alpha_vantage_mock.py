@@ -121,6 +121,94 @@ def mock_response(function: str, params: Dict[str, Any]) -> Dict[str, Any]:
             "_mocked_at": _iso_now(),
         }
 
+    if fn in ("INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW"):
+        # Minimal statement payload shape:
+        # { "symbol": "...", "annualReports":[{fiscalDateEnding,...}], "quarterlyReports":[...] }
+        # Values are strings in Alpha Vantage responses.
+        q1 = "2025-09-30"
+        q2 = "2025-06-30"
+        a1 = "2024-12-31"
+        a2 = "2023-12-31"
+
+        if fn == "CASH_FLOW":
+            base = {
+                "symbol": symbol,
+                "annualReports": [
+                    {
+                        "fiscalDateEnding": a1,
+                        "operatingCashflow": "1200",
+                        "capitalExpenditures": "-200",
+                        "dividendsPaid": "-50",
+                        "paymentsForRepurchaseOfCommonStock": "-80",
+                        "stockBasedCompensation": "30",
+                    },
+                    {
+                        "fiscalDateEnding": a2,
+                        "operatingCashflow": "1100",
+                        "capitalExpenditures": "-180",
+                        "dividendsPaid": "-40",
+                        "paymentsForRepurchaseOfCommonStock": "-70",
+                        "stockBasedCompensation": "25",
+                    },
+                ],
+                "quarterlyReports": [
+                    {
+                        "fiscalDateEnding": q1,
+                        "operatingCashflow": "320",
+                        "capitalExpenditures": "-60",
+                        "dividendsPaid": "-12",
+                        "paymentsForRepurchaseOfCommonStock": "-20",
+                        "stockBasedCompensation": "8",
+                    },
+                    {
+                        "fiscalDateEnding": q2,
+                        "operatingCashflow": "300",
+                        "capitalExpenditures": "-55",
+                        "dividendsPaid": "-11",
+                        "paymentsForRepurchaseOfCommonStock": "-18",
+                        "stockBasedCompensation": "7",
+                    },
+                ],
+            }
+            # Make ADBE "SBC unavailable" example by removing the field.
+            if symbol == "ADBE":
+                for r in base["annualReports"]:
+                    r.pop("stockBasedCompensation", None)
+                for r in base["quarterlyReports"]:
+                    r.pop("stockBasedCompensation", None)
+            base["_mocked_at"] = _iso_now()
+            return base
+
+        if fn == "INCOME_STATEMENT":
+            base = {
+                "symbol": symbol,
+                "annualReports": [
+                    {"fiscalDateEnding": a1, "totalRevenue": "5000", "netIncome": "900", "operatingIncome": "1200"},
+                    {"fiscalDateEnding": a2, "totalRevenue": "4700", "netIncome": "820", "operatingIncome": "1100"},
+                ],
+                "quarterlyReports": [
+                    {"fiscalDateEnding": q1, "totalRevenue": "1300", "netIncome": "240", "operatingIncome": "320"},
+                    {"fiscalDateEnding": q2, "totalRevenue": "1250", "netIncome": "220", "operatingIncome": "300"},
+                ],
+                "_mocked_at": _iso_now(),
+            }
+            return base
+
+        if fn == "BALANCE_SHEET":
+            base = {
+                "symbol": symbol,
+                "annualReports": [
+                    {"fiscalDateEnding": a1, "shortTermDebt": "100", "longTermDebt": "900"},
+                    {"fiscalDateEnding": a2, "shortTermDebt": "120", "longTermDebt": "880"},
+                ],
+                "quarterlyReports": [
+                    {"fiscalDateEnding": q1, "shortTermDebt": "105", "longTermDebt": "910"},
+                    {"fiscalDateEnding": q2, "shortTermDebt": "110", "longTermDebt": "905"},
+                ],
+                "_mocked_at": _iso_now(),
+            }
+            return base
+
     # Unsupported mock endpoint: return empty payload (acts like "not found")
     return {"_mocked_at": _iso_now()}
 
