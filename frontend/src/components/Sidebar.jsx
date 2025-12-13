@@ -1,7 +1,10 @@
 import React, { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import './Sidebar.css'
 
-const Sidebar = ({ selectedNav, onNavSelect, onTickerSelect }) => {
+const Sidebar = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [searchQuery, setSearchQuery] = useState('')
 
   const navItems = [
@@ -15,9 +18,16 @@ const Sidebar = ({ selectedNav, onNavSelect, onTickerSelect }) => {
 
   const handleSearch = (e) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
-      onTickerSelect(searchQuery.toUpperCase())
+      const t = searchQuery.toUpperCase().trim()
+      navigate(`/browse/${encodeURIComponent(t)}`)
     }
   }
+
+  const selectedNav = location.pathname.startsWith('/watchlist')
+    ? 'Watchlist'
+    : location.pathname.startsWith('/browse')
+      ? 'Browse'
+      : 'Browse'
 
   return (
     <div className="sidebar">
@@ -45,7 +55,10 @@ const Sidebar = ({ selectedNav, onNavSelect, onTickerSelect }) => {
           <div
             key={item.id}
             className={`nav-item ${selectedNav === item.id ? 'active' : ''}`}
-            onClick={() => onNavSelect(item.id)}
+            onClick={() => {
+              if (item.id === 'Watchlist') navigate('/watchlist')
+              if (item.id === 'Browse') navigate('/browse/ADBE')
+            }}
           >
             <span className="nav-icon">{item.icon}</span>
             <span className="nav-label">{item.label}</span>

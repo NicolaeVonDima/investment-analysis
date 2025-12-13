@@ -3,7 +3,8 @@ import axios from 'axios'
 import './WatchlistView.css'
 
 const WatchlistView = () => {
-  const API_URL = import.meta.env.VITE_API_URL || '/api'
+  const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
+  const API_URL = `${API_ROOT}/api`
   const userId = 'demo'
 
   const [watchlists, setWatchlists] = useState([])

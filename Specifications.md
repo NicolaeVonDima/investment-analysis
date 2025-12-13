@@ -106,3 +106,38 @@ Source: [Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf](file://Spec_DataPr
 - Graceful degradation on provider limit (stale preserved; retries/backoff).
 - All stored data includes provider + retrieval metadata.
 
+
+## 2025-12-13 — v1.3.0 — Ticker Search → Browse (Alpha Vantage) with 24h DB Cache
+
+Source: [Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf](file://Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf)
+
+### Objective
+- Search box resolves ticker and navigates to `/browse/{ticker}`.
+- Browse page is populated from Alpha Vantage-backed **browse-lite** data.
+- Enforce **24-hour freshness**:
+  - if refreshed within last 24h: serve from DB only (no provider call)
+  - else: refresh from Alpha Vantage, persist, update refresh timestamp, return updated snapshot
+
+### Scope
+- UI: Search submit + Browse routing + data binding for a single ticker.
+- Backend: Resolve ticker, serve browse-lite from DB, conditional refresh based on freshness, timestamp management.
+- Database: minimal additional fields/tables to support cache rule.
+
+### Non-scope (v1)
+- Historical/fundamentals backfill UI flow (separate from this browse-lite cache).
+- Watchlist refresh universe scheduling.
+
+### API (internal)
+- `POST /api/instruments/resolve` body `{ query: "AAPL" }` (also accepts `{ symbol: "AAPL" }`)
+- `GET /api/instruments/{ticker}/browse-lite`
+- Optional debug/admin: `POST /api/instruments/{ticker}/refresh-lite`
+
+### Data freshness rule
+- `fresh = (now - last_refresh_at) < 24h`
+- Update `last_refresh_at` only after a successful provider refresh.
+
+### Concurrency & idempotency
+- Per-ticker lock during refresh-lite.
+- `price_eod` uniqueness prevents duplicate daily rows.
+- Refresh timestamp updates are atomic with successful provider fetch.
+

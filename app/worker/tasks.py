@@ -40,6 +40,16 @@ from sqlalchemy.exc import IntegrityError
 import time
 
 
+def _years_ago_safe(d: date, years: int) -> date:
+    """
+    Subtract whole years while handling leap-day transitions (e.g., Feb 29 -> Feb 28).
+    """
+    try:
+        return d.replace(year=d.year - years)
+    except ValueError:
+        return d.replace(year=d.year - years, day=28)
+
+
 @celery_app.task(bind=True, name="process_analysis")
 def process_analysis_task(self, request_id: int):
     """
@@ -602,7 +612,7 @@ def backfill_instrument_data(self, instrument_id: int):
             raise ValueError("Unexpected TIME_SERIES_DAILY_ADJUSTED payload")
 
         today = datetime.utcnow().date()
-        cutoff = date(today.year - 5, today.month, today.day)
+        cutoff = _years_ago_safe(today, 5)
         inserted = 0
         skipped = 0
 
@@ -750,4 +760,3 @@ def backfill_instrument_data(self, instrument_id: int):
         raise
     finally:
         db.close()
-

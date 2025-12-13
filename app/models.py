@@ -513,3 +513,26 @@ class ProviderRefreshJob(Base):
 
     instrument = relationship("Instrument")
 
+
+class InstrumentRefresh(Base):
+    """
+    Per-instrument refresh state for UI-lite browse caching.
+
+    This is global (not per user) and tracks the most recent successful refresh time.
+    """
+
+    __tablename__ = "instrument_refresh"
+
+    instrument_id = Column(
+        Integer, ForeignKey("instruments.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+
+    last_refresh_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_status = Column(String(32), nullable=True)  # success|failed
+    last_error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+

@@ -85,8 +85,8 @@ class AlphaVantageClient:
             "payload": data,
         }
 
-    def get_daily_adjusted(self, symbol: str) -> Dict[str, Any]:
-        data = self._get({"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol, "outputsize": "full"})
+    def get_daily_adjusted(self, symbol: str, outputsize: str = "full") -> Dict[str, Any]:
+        data = self._get({"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol, "outputsize": outputsize})
         return {
             "provider": "alpha_vantage",
             "endpoint": "TIME_SERIES_DAILY_ADJUSTED",
@@ -94,6 +94,9 @@ class AlphaVantageClient:
             "fetched_at": datetime.utcnow().isoformat(),
             "payload": data,
         }
+
+    def get_daily_adjusted_compact(self, symbol: str) -> Dict[str, Any]:
+        return self.get_daily_adjusted(symbol, outputsize="compact")
 
     def get_income_statement(self, symbol: str) -> Dict[str, Any]:
         data = self._get({"function": "INCOME_STATEMENT", "symbol": symbol})

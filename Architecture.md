@@ -60,3 +60,20 @@ We introduce `provider_refresh_jobs` to track provider operations (lite/backfill
 - Worker tasks are rate limited per provider (Alpha Vantage free tier constraints).
 - Retries with backoff; UI remains functional by serving last known snapshots with `stale=true`.
 
+## 2025-12-13 — v1.3.0 — Browse-lite 24h cache + ticker routing
+
+Source: [Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf](file://Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf)
+
+### Backend cache state
+- Introduces `instrument_refresh` as the canonical per-instrument cache state:
+  - `last_refresh_at`, `last_status`, `last_error`
+- Browse-lite endpoint uses this table to enforce the 24h freshness rule.
+
+### Concurrency control
+- For Postgres: per-ticker **advisory transaction lock** to avoid concurrent refresh-lite calls duplicating work.
+- For other engines: best-effort (uniqueness constraints still protect `price_eod`).
+
+### Frontend routing
+- UI uses `/browse/:ticker` route and the sidebar search navigates there.
+- Browse view calls `GET /api/instruments/{ticker}/browse-lite`.
+

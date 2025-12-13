@@ -51,4 +51,14 @@
 ### Done
 - Rotated local Alpha Vantage API key configuration (still read via `ALPHAVANTAGE_API_KEY` env var).
 
+## 2025-12-13 — Status Update (v1.3.0 browse-lite)
+
+### Done
+- Search box now navigates to `/browse/:ticker`.
+- Backend provides `GET /api/instruments/{ticker}/browse-lite` with **24h DB cache** and **per-ticker lock**.
+- Added `instrument_refresh` table to track `last_refresh_at` and refresh status.
+
+### Tests
+- `pytest`: PASS
+
 

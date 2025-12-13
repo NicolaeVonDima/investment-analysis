@@ -53,4 +53,26 @@ The existing `refresh_jobs` table is scoped to the watchlist daily-union refresh
   - provider/instrument refresh/backfill audit
 - Enables stable API contracts for UI-lite endpoints.
 
+## 2025-12-13 — ADR-0003 — Add `instrument_refresh` for 24h browse-lite caching
+
+Source: [Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf](file://Spec_Ticker_Search_Browse_AlphaVantage_24hCache.pdf)
+
+### Decision
+Introduce a minimal `instrument_refresh` table to track:
+- `last_refresh_at` (successful refresh time)
+- `last_status` / `last_error`
+
+and use it to enforce a **24-hour DB cache** rule in `GET /api/instruments/{ticker}/browse-lite`.
+
+### Context
+Browse-lite needs a deterministic freshness rule independent of UI sessions, and should avoid provider calls when data is still fresh.
+
+### Alternatives considered
+- Reuse `provider_refresh_jobs` only:
+  - rejected; jobs are request-key oriented and do not provide a stable “last successful refresh” pointer for cache TTL.
+
+### Consequences
+- Simple and explicit cache TTL behavior.
+- Allows graceful provider failure (serve stale DB if available while recording `last_error`).
+
 

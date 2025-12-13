@@ -11,6 +11,9 @@ from typing import Optional
 import os
 from datetime import datetime
 from datetime import date as date_type
+import zlib
+import time
+from sqlalchemy import text
 
 from app.database import get_db, init_db
 from app.models import (
@@ -29,6 +32,7 @@ from app.models import (
     Instrument,
     ProviderSymbolMap,
     PriceEOD,
+    InstrumentRefresh,
 )
 from app.worker.tasks import process_analysis_task
 from app.api_schemas import (
@@ -49,8 +53,10 @@ from app.api_schemas import (
     InstrumentResponse,
     LiteSnapshotResponse,
     BackfillEnqueueResponse,
+    BrowseLiteResponse,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
+from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest
 
 app = FastAPI(
     title="Investment Analysis Platform",
@@ -81,11 +87,20 @@ async def startup_event():
     """Initialize database on startup."""
     init_db()
     # Seed initial instruments (best-effort)
+    gen = None
     try:
-        db = next(get_db())
+        gen = get_db()
+        db = next(gen)
         _seed_instruments(db)
     except Exception:
         pass
+    finally:
+        # Ensure `get_db()` generator finalizer runs and session is closed.
+        if gen is not None:
+            try:
+                gen.close()
+            except Exception:
+                pass
 
 
 @app.get("/")
@@ -549,7 +564,10 @@ async def resolve_instrument(request: ResolveInstrumentRequest):
     Prefer provider symbol maps; otherwise create a new instrument using the symbol as canonical.
     """
     db = next(get_db())
-    symbol = request.symbol.upper().strip()
+    raw = (request.symbol or request.query or "").upper().strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="symbol/query is required")
+    symbol = raw
     if not symbol.replace(".", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid symbol format")
 
@@ -607,6 +625,226 @@ async def resolve_instrument(request: ResolveInstrumentRequest):
         sector=inst.sector,
         industry=inst.industry,
         currency=inst.currency,
+    )
+
+
+def _advisory_lock_id_from_ticker(ticker: str) -> int:
+    # Deterministic 32-bit hash promoted to signed 64-bit.
+    return int(zlib.crc32(ticker.encode("utf-8")) & 0x7FFFFFFF)
+
+
+def _maybe_acquire_ticker_lock(db, ticker: str):
+    """
+    Acquire a per-ticker lock for Postgres using pg_advisory_xact_lock.
+    No-op for non-Postgres engines.
+    """
+    try:
+        bind = db.get_bind()
+        if getattr(bind.dialect, "name", "") != "postgresql":
+            return
+        lock_id = _advisory_lock_id_from_ticker(ticker)
+        db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
+    except Exception:
+        # Best-effort; uniqueness constraints still prevent duplicates.
+        return
+
+
+@app.get("/api/instruments/{ticker}/browse-lite", response_model=BrowseLiteResponse)
+async def browse_lite(ticker: str):
+    """
+    24h cache:
+    - If last_refresh_at < 24h: serve DB only.
+    - Else: refresh from Alpha Vantage, persist, update last_refresh_at, and return updated snapshot.
+    """
+    db = next(get_db())
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    # Resolve / create instrument (reuse existing resolve behavior via provider map)
+    mapping = (
+        db.query(ProviderSymbolMap)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == t)
+        .first()
+    )
+    inst = None
+    if mapping:
+        inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
+    if not inst:
+        inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        inst = Instrument(canonical_symbol=t)
+        db.add(inst)
+        db.commit()
+        db.refresh(inst)
+        # create provider map best-effort
+        try:
+            db.add(
+                ProviderSymbolMap(
+                    provider="alpha_vantage",
+                    provider_symbol=t,
+                    instrument_id=inst.id,
+                    is_primary=True,
+                )
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    now = datetime.utcnow()
+    refresh = db.query(InstrumentRefresh).filter(InstrumentRefresh.instrument_id == inst.id).first()
+    if not refresh:
+        refresh = InstrumentRefresh(instrument_id=inst.id, last_refresh_at=None, last_status=None, last_error=None)
+        db.add(refresh)
+        db.commit()
+        db.refresh(refresh)
+
+    latest = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .first()
+    )
+
+    if is_fresh(refresh.last_refresh_at, now) and latest:
+        staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+        return BrowseLiteResponse(
+            ticker=inst.canonical_symbol,
+            instrument_id=inst.id,
+            name=inst.name,
+            currency=inst.currency,
+            exchange=inst.exchange,
+            as_of_date=latest.as_of_date if latest else None,
+            close=latest.close if latest else None,
+            change_pct=None,
+            source="db",
+            last_refresh_at=refresh.last_refresh_at.isoformat() if refresh.last_refresh_at else None,
+            staleness_hours=staleness_hours,
+            stale=False,
+            last_status=refresh.last_status,
+            last_error=refresh.last_error,
+        )
+
+    # stale/missing -> refresh synchronously, protected by per-ticker lock
+    _maybe_acquire_ticker_lock(db, inst.canonical_symbol)
+    db.refresh(refresh)
+    latest = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .first()
+    )
+    if is_fresh(refresh.last_refresh_at, now) and latest:
+        staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+        return BrowseLiteResponse(
+            ticker=inst.canonical_symbol,
+            instrument_id=inst.id,
+            name=inst.name,
+            currency=inst.currency,
+            exchange=inst.exchange,
+            as_of_date=latest.as_of_date,
+            close=latest.close,
+            change_pct=None,
+            source="db",
+            last_refresh_at=refresh.last_refresh_at.isoformat() if refresh.last_refresh_at else None,
+            staleness_hours=staleness_hours,
+            stale=False,
+            last_status=refresh.last_status,
+            last_error=refresh.last_error,
+        )
+
+    # Provider refresh with retries/backoff
+    from app.services.alpha_vantage_client import AlphaVantageClient
+
+    client = AlphaVantageClient()
+    attempts = 3
+    backoff = 1.0
+    last_exc = None
+    for i in range(attempts):
+        try:
+            daily = client.get_daily_adjusted_compact(inst.canonical_symbol)
+            payload = daily.get("payload") if isinstance(daily, dict) else None
+            if not isinstance(payload, dict):
+                raise ValueError("Unexpected provider payload")
+            parsed = parse_daily_adjusted_latest(payload)
+            if not parsed:
+                raise ValueError("Unable to parse latest daily adjusted price")
+
+            # insert (idempotent via unique constraint)
+            existing = (
+                db.query(PriceEOD)
+                .filter(PriceEOD.instrument_id == inst.id, PriceEOD.as_of_date == parsed.as_of_date)
+                .first()
+            )
+            if not existing:
+                db.add(
+                    PriceEOD(
+                        instrument_id=inst.id,
+                        as_of_date=parsed.as_of_date,
+                        close=parsed.close,
+                        adjusted_close=None,
+                        volume=None,
+                        provider="alpha_vantage",
+                        source_metadata={"endpoint": "TIME_SERIES_DAILY_ADJUSTED", "fetched_at": daily.get("fetched_at")},
+                    )
+                )
+                db.commit()
+            refresh.last_refresh_at = now
+            refresh.last_status = "success"
+            refresh.last_error = None
+            db.commit()
+
+            staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+            return BrowseLiteResponse(
+                ticker=inst.canonical_symbol,
+                instrument_id=inst.id,
+                name=inst.name,
+                currency=inst.currency,
+                exchange=inst.exchange,
+                as_of_date=parsed.as_of_date,
+                close=parsed.close,
+                change_pct=parsed.change_pct,
+                source="alpha_vantage",
+                last_refresh_at=refresh.last_refresh_at.isoformat() if refresh.last_refresh_at else None,
+                staleness_hours=staleness_hours,
+                stale=False,
+                last_status=refresh.last_status,
+                last_error=refresh.last_error,
+            )
+        except Exception as e:
+            last_exc = e
+            # If key is missing, do not retry.
+            if "ALPHAVANTAGE_API_KEY is not set" in str(e):
+                break
+            time.sleep(backoff)
+            backoff *= 2
+
+    # Provider failure: return stale DB if available
+    refresh.last_status = "failed"
+    refresh.last_error = str(last_exc) if last_exc else "provider_refresh_failed"
+    db.commit()
+    latest = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .first()
+    )
+    staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+    return BrowseLiteResponse(
+        ticker=inst.canonical_symbol,
+        instrument_id=inst.id,
+        name=inst.name,
+        currency=inst.currency,
+        exchange=inst.exchange,
+        as_of_date=latest.as_of_date if latest else None,
+        close=latest.close if latest else None,
+        change_pct=None,
+        source="db" if latest else "alpha_vantage",
+        last_refresh_at=refresh.last_refresh_at.isoformat() if refresh.last_refresh_at else None,
+        staleness_hours=staleness_hours,
+        stale=True,
+        last_status=refresh.last_status,
+        last_error=refresh.last_error,
     )
 
 
@@ -872,4 +1110,3 @@ async def run_watchlist_refresh_now():
 
     async_result = refresh_watchlist_universe.delay()
     return {"task_id": async_result.id, "status": "queued"}
-

@@ -25,7 +25,8 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
     'Stock Exchange'
   ]
 
-  const API_URL = import.meta.env.VITE_API_URL || '/api'
+  const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
+  const API_URL = `${API_ROOT}/api`
 
   const handleAnalyze = async () => {
     if (!ticker) return
@@ -67,16 +68,15 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   }
 
   useEffect(() => {
-    // Load UI-lite snapshot (preferred for UI identity/price/freshness).
+    // Browse-lite (24h cached, may refresh from provider synchronously)
     const run = async () => {
       if (!ticker) return
       setLiteLoading(true)
       setLiteError(null)
       try {
-        const resolved = await axios.post(`${API_URL}/instruments/resolve`, { symbol: ticker })
-        setInstrument(resolved.data)
-        const snap = await axios.get(`${API_URL}/instruments/${resolved.data.id}/snapshot/latest-lite`)
-        setLite(snap.data)
+        const res = await axios.get(`${API_URL}/instruments/${encodeURIComponent(ticker)}/browse-lite`)
+        setLite(res.data)
+        setInstrument({ id: res.data.instrument_id, canonical_symbol: res.data.ticker, name: res.data.name, currency: res.data.currency, exchange: res.data.exchange })
       } catch (e) {
         setLiteError(e?.response?.data?.detail || e.message)
         setLite(null)
@@ -109,7 +109,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
 
   // Mock data for demonstration
   const companyName =
-    lite?.instrument?.name ||
+    lite?.name ||
     instrument?.name ||
     (ticker ? `${ticker} Stock` : 'Unknown')
 
@@ -118,9 +118,9 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
       name: companyName,
       ticker: ticker || 'IE00B4L5Y983'
     },
-    currentPrice: typeof lite?.price === 'number' ? lite.price : null,
+    currentPrice: typeof lite?.close === 'number' ? lite.close : null,
     change: null,
-    changePercent: null,
+    changePercent: typeof lite?.change_pct === 'number' ? lite.change_pct * 100 : null,
     rating: 4.72,
     fundSize: '$99869m',
     ter: '0.20%',
@@ -146,7 +146,8 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
               <>
                 <span>{lite.stale ? 'Stale' : 'Fresh'}</span>
                 {lite.as_of_date ? <span>{` • as of ${lite.as_of_date}`}</span> : null}
-                {lite.refresh_queued ? <span>{' • refresh queued'}</span> : null}
+                {lite.last_refresh_at ? <span>{` • refreshed ${lite.last_refresh_at}`}</span> : null}
+                {typeof lite.staleness_hours === 'number' ? <span>{` • ${lite.staleness_hours.toFixed(1)}h old`}</span> : null}
               </>
             ) : null}
           </div>

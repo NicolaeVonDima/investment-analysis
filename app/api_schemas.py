@@ -117,7 +117,9 @@ class WatchlistStatusResponse(BaseModel):
 
 
 class ResolveInstrumentRequest(BaseModel):
-    symbol: str = Field(..., min_length=1, max_length=32)
+    # Accept either `symbol` (current clients) or `query` (spec v1.3.0).
+    symbol: Optional[str] = Field(None, min_length=1, max_length=32)
+    query: Optional[str] = Field(None, min_length=1, max_length=32)
 
 
 class InstrumentResponse(BaseModel):
@@ -146,5 +148,25 @@ class BackfillEnqueueResponse(BaseModel):
     status: str
     request_key: str
     job_id: Optional[int] = None
+
+
+class BrowseLiteResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    name: Optional[str] = None
+    currency: Optional[str] = None
+    exchange: Optional[str] = None
+
+    as_of_date: Optional[date] = None
+    close: Optional[float] = None
+    change_pct: Optional[float] = None
+
+    source: str  # db|alpha_vantage
+    last_refresh_at: Optional[str] = None
+    staleness_hours: Optional[float] = None
+    stale: bool
+
+    last_status: Optional[str] = None
+    last_error: Optional[str] = None
 
 
