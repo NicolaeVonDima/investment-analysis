@@ -164,8 +164,8 @@ const PerformanceTab = ({ data, mockData, loading }) => {
             <div className="heatmap-grid">
               <div className="heatmap-header">
                 <div className="heatmap-spacer"></div>
-                {monthNames.map((month) => (
-                  <div key={month} className="heatmap-month">{month}</div>
+                {monthNames.map((month, idx) => (
+                  <div key={`${month}-${idx}`} className="heatmap-month">{month}</div>
                 ))}
               </div>
             </div>
