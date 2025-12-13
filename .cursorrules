@@ -1,0 +1,52 @@
+# Cursor Project Rules – Investment Analysis Platform
+
+## Canonical Context Files (Must Exist)
+The following files are the source of truth and must be created if missing and updated continuously:
+
+- Specifications.md — authoritative record of all agreed requirements and feature specifications
+- Architecture.md — living architecture overview derived from Specifications
+- ProjectStatus.md — timeline of progress, current focus, risks, and next tasks
+
+## Optional but Strongly Recommended Context Files
+If present, these files must also be respected and updated:
+
+- Decisions.md (or /adr/) — Architecture Decision Records explaining why key choices were made
+- DataSources.md — data providers, endpoints, refresh cadence, limitations, licensing notes
+- Backlog.md — prioritized backlog of future work
+- Glossary.md — canonical definitions of domain terms
+- Runbook.md — local run instructions, refresh procedures, troubleshooting, deployment notes
+
+## Global Rules (Apply to Every Request)
+- Always read existing context files before proposing changes.
+- For every user request:
+  - validate it against existing specifications
+  - update Specifications.md, Architecture.md, and ProjectStatus.md.
+- If a request conflicts with existing specifications or architecture:
+  - explicitly flag the conflict
+  - ask for clarification before proceeding.
+- Prefer reuse over new code.
+  - Introduce new modules only as a last resort
+  - Document justification when new code is unavoidable.
+- Never overwrite historical information.
+  - All context files are append-only
+  - Use dates (YYYY-MM-DD) and version identifiers (vX.Y.Z).
+- Explicitly record assumptions when requirements are ambiguous.
+- Do not invent data sources, metrics, or architecture components not grounded in documented specifications.
+- Treat data snapshots, analyses, and memos as immutable and reproducible artifacts.
+
+## File-Specific Update Rules
+- Specifications.md:
+  - Append new specs with date, scope, acceptance criteria, non-goals, and data impact.
+- Architecture.md:
+  - Assess the impact of each new spec
+  - Prefer reuse
+  - Update diagrams/sections minimally.
+- ProjectStatus.md:
+  - Track what changed
+  - Current focus
+  - Risks and mitigations
+  - Next concrete tasks.
+- Decisions.md:
+  - Record why a decision was made and alternatives rejected.
+- DataSources.md:
+  - Update whenever providers, refresh cadence, or limitations change.

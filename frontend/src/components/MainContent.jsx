@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import PerformanceTab from './PerformanceTab'
+import WatchlistView from './WatchlistView'
 import './MainContent.css'
 
-const MainContent = ({ ticker, selectedTab: initialTab }) => {
+const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   const [selectedTab, setSelectedTab] = useState(initialTab || 'Performance')
   const [analysisData, setAnalysisData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [jobId, setJobId] = useState(null)
+  const [addingToWatchlist, setAddingToWatchlist] = useState(false)
+  const [watchlistAdded, setWatchlistAdded] = useState(false)
 
   const tabs = [
     'Key Data',
@@ -66,6 +69,25 @@ const MainContent = ({ ticker, selectedTab: initialTab }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker])
 
+  const addToWatchlist = async () => {
+    if (!ticker) return
+    setAddingToWatchlist(true)
+    try {
+      await axios.post(`${API_URL}/watchlists/default/add`, { ticker }, { headers: { 'X-User-Id': 'demo' } })
+      setWatchlistAdded(true)
+      setTimeout(() => setWatchlistAdded(false), 2500)
+    } catch (e) {
+      console.error('Failed to add to watchlist:', e)
+      alert('Failed to add to watchlist')
+    } finally {
+      setAddingToWatchlist(false)
+    }
+  }
+
+  if (selectedNav === 'Watchlist') {
+    return <WatchlistView />
+  }
+
   // Mock data for demonstration
   const mockData = {
     company: {
@@ -103,8 +125,8 @@ const MainContent = ({ ticker, selectedTab: initialTab }) => {
           <button className="action-btn">
             <span>⬇️</span> Download Factsheet
           </button>
-          <button className="action-btn primary">
-            ✓ Added to Watchlist
+          <button className="action-btn primary" onClick={addToWatchlist} disabled={addingToWatchlist}>
+            {watchlistAdded ? 'Added to Watchlist' : addingToWatchlist ? 'Adding…' : 'Add to Watchlist'}
           </button>
         </div>
       </div>

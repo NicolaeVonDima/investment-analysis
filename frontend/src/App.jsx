@@ -16,6 +16,7 @@ function App() {
       />
       <MainContent 
         ticker={selectedTicker}
+        selectedNav={selectedNav}
         selectedTab="Performance"
       />
     </div>

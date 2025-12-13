@@ -4,11 +4,15 @@ Handles data fetching, metric computation, narrative generation, and PDF renderi
 """
 
 from celery import Celery
+from celery.schedules import crontab
 import os
 
 # Initialize Celery
+_always_eager = os.getenv("CELERY_ALWAYS_EAGER", "").strip() in {"1", "true", "True", "yes", "YES"}
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-celery_app = Celery("investment_analysis", broker=redis_url, backend=redis_url)
+_broker_url = "memory://" if _always_eager else redis_url
+_result_backend = "cache+memory://" if _always_eager else redis_url
+celery_app = Celery("investment_analysis", broker=_broker_url, backend=_result_backend)
 
 # Celery configuration
 celery_app.conf.update(
@@ -21,6 +25,22 @@ celery_app.conf.update(
     task_time_limit=300,  # 5 minutes
     task_soft_time_limit=240,  # 4 minutes
 )
+
+if _always_eager:
+    # Run tasks inline when no broker is available.
+    # Do not propagate task exceptions into the web request path; mimic async behavior.
+    celery_app.conf.update(task_always_eager=True, task_eager_propagates=False, task_store_eager_result=False)
+
+# Watchlist global refresh schedule (admin-configured via env).
+# Default: daily at 02:00 UTC.
+_refresh_hour = int(os.getenv("WATCHLIST_REFRESH_HOUR", "2"))
+_refresh_minute = int(os.getenv("WATCHLIST_REFRESH_MINUTE", "0"))
+celery_app.conf.beat_schedule = {
+    "refresh_watchlist_universe_daily": {
+        "task": "refresh_watchlist_universe",
+        "schedule": crontab(minute=_refresh_minute, hour=_refresh_hour),
+    }
+}
 
 if __name__ == "__main__":
     celery_app.start()

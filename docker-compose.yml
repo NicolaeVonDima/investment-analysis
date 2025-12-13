@@ -55,6 +55,27 @@ services:
       - ./templates:/app/templates
     command: celery -A app.worker.main worker --loglevel=info
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
+      REDIS_URL: redis://redis:6379/0
+      WATCHLIST_REFRESH_HOUR: "2"
+      WATCHLIST_REFRESH_MINUTE: "0"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app/app
+      - ./output:/app/output
+      - ./rulesets:/app/rulesets
+      - ./templates:/app/templates
+    command: celery -A app.worker.main beat --loglevel=info
+
   redis:
     image: redis:7-alpine
     ports:
@@ -72,7 +93,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:8000/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
