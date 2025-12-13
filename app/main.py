@@ -195,7 +195,7 @@ def _seed_instruments(db):
 
 
 @app.post("/api/analyze", status_code=202)
-async def analyze_ticker(request: TickerRequest):
+async def analyze_ticker(request: TickerRequest, db: Session = Depends(get_db)):
     """
     Submit a stock ticker for analysis.
     Returns a job ID that can be used to check status and retrieve results.
@@ -207,7 +207,6 @@ async def analyze_ticker(request: TickerRequest):
         raise HTTPException(status_code=400, detail="Invalid ticker format")
     
     # Create analysis request record
-    db = next(get_db())
     analysis_request = AnalysisRequest(
         ticker=ticker,
         ruleset_version=request.ruleset_version,
@@ -230,9 +229,8 @@ async def analyze_ticker(request: TickerRequest):
 
 
 @app.get("/api/status/{job_id}")
-async def get_status(job_id: int):
+async def get_status(job_id: int, db: Session = Depends(get_db)):
     """Get the status of an analysis job."""
-    db = next(get_db())
     analysis_request = db.query(AnalysisRequest).filter(AnalysisRequest.id == job_id).first()
     
     if not analysis_request:
@@ -249,9 +247,8 @@ async def get_status(job_id: int):
 
 
 @app.get("/api/result/{job_id}/json")
-async def get_json_result(job_id: int):
+async def get_json_result(job_id: int, db: Session = Depends(get_db)):
     """Retrieve the JSON result of a completed analysis."""
-    db = next(get_db())
     analysis_request = db.query(AnalysisRequest).filter(AnalysisRequest.id == job_id).first()
     
     if not analysis_request:
@@ -274,9 +271,8 @@ async def get_json_result(job_id: int):
 
 
 @app.get("/api/result/{job_id}/pdf")
-async def get_pdf_result(job_id: int):
+async def get_pdf_result(job_id: int, db: Session = Depends(get_db)):
     """Retrieve the PDF result of a completed analysis."""
-    db = next(get_db())
     analysis_request = db.query(AnalysisRequest).filter(AnalysisRequest.id == job_id).first()
     
     if not analysis_request:
@@ -302,9 +298,8 @@ async def get_pdf_result(job_id: int):
 
 
 @app.get("/api/jobs")
-async def list_jobs(limit: int = 20, offset: int = 0):
+async def list_jobs(limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
     """List recent analysis jobs."""
-    db = next(get_db())
     jobs = db.query(AnalysisRequest).order_by(AnalysisRequest.created_at.desc()).offset(offset).limit(limit).all()
     
     return {
@@ -329,9 +324,8 @@ async def list_jobs(limit: int = 20, offset: int = 0):
 
 
 @app.get("/api/snapshots/data/{ticker}")
-async def list_data_snapshots(ticker: str, limit: int = 20, offset: int = 0):
+async def list_data_snapshots(ticker: str, limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
     """List data snapshots for a ticker (most recent first)."""
-    db = next(get_db())
     t = ticker.upper().strip()
     snaps = (
         db.query(DataSnapshot)
@@ -360,9 +354,8 @@ async def list_data_snapshots(ticker: str, limit: int = 20, offset: int = 0):
 
 
 @app.get("/api/snapshots/memos/{ticker}")
-async def list_memo_snapshots(ticker: str, limit: int = 20, offset: int = 0):
+async def list_memo_snapshots(ticker: str, limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
     """List memo snapshots (analysis artifacts) for a ticker (most recent first)."""
-    db = next(get_db())
     t = ticker.upper().strip()
 
     rows = (
@@ -396,9 +389,8 @@ async def list_memo_snapshots(ticker: str, limit: int = 20, offset: int = 0):
 
 
 @app.get("/api/memo/{memo_id}/json")
-async def get_memo_json(memo_id: int):
+async def get_memo_json(memo_id: int, db: Session = Depends(get_db)):
     """Retrieve stored memo snapshot JSON (immutable analysis artifact)."""
-    db = next(get_db())
     memo = db.query(MemoSnapshot).filter(MemoSnapshot.id == memo_id).first()
     if not memo:
         raise HTTPException(status_code=404, detail="Memo snapshot not found")
@@ -406,9 +398,8 @@ async def get_memo_json(memo_id: int):
 
 
 @app.get("/api/memo/{memo_id}/pdf")
-async def get_memo_pdf(memo_id: int):
+async def get_memo_pdf(memo_id: int, db: Session = Depends(get_db)):
     """Retrieve stored memo snapshot PDF by memo snapshot id."""
-    db = next(get_db())
     memo = db.query(MemoSnapshot).filter(MemoSnapshot.id == memo_id).first()
     if not memo:
         raise HTTPException(status_code=404, detail="Memo snapshot not found")
@@ -428,8 +419,7 @@ async def get_memo_pdf(memo_id: int):
 
 
 @app.post("/api/portfolios", response_model=PortfolioResponse)
-async def create_portfolio(request: CreatePortfolioRequest):
-    db = next(get_db())
+async def create_portfolio(request: CreatePortfolioRequest, db: Session = Depends(get_db)):
     p = Portfolio(name=request.name, description=request.description, strategy=request.strategy)
     db.add(p)
     db.commit()
@@ -438,15 +428,13 @@ async def create_portfolio(request: CreatePortfolioRequest):
 
 
 @app.get("/api/portfolios", response_model=list[PortfolioResponse])
-async def list_portfolios(limit: int = 50, offset: int = 0):
-    db = next(get_db())
+async def list_portfolios(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
     ps = db.query(Portfolio).order_by(Portfolio.created_at.desc()).offset(offset).limit(limit).all()
     return [PortfolioResponse(id=p.id, name=p.name, description=p.description, strategy=p.strategy) for p in ps]
 
 
 @app.get("/api/portfolios/{portfolio_id}")
-async def get_portfolio(portfolio_id: int):
-    db = next(get_db())
+async def get_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
     p = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio not found")
@@ -469,8 +457,7 @@ async def get_portfolio(portfolio_id: int):
 
 
 @app.post("/api/portfolios/{portfolio_id}/positions", response_model=PositionResponse)
-async def add_position(portfolio_id: int, request: AddPositionRequest):
-    db = next(get_db())
+async def add_position(portfolio_id: int, request: AddPositionRequest, db: Session = Depends(get_db)):
     p = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Portfolio not found")
@@ -511,8 +498,7 @@ async def add_position(portfolio_id: int, request: AddPositionRequest):
 
 
 @app.post("/api/portfolios/{portfolio_id}/recalculate", response_model=PortfolioDashboardResponse)
-async def recalculate_portfolio(portfolio_id: int):
-    db = next(get_db())
+async def recalculate_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
     try:
         snap = recompute_portfolio_dashboard(db, portfolio_id)
     except ValueError as e:
@@ -527,8 +513,7 @@ async def recalculate_portfolio(portfolio_id: int):
 
 
 @app.get("/api/portfolios/{portfolio_id}/dashboard", response_model=PortfolioDashboardResponse)
-async def get_portfolio_dashboard(portfolio_id: int):
-    db = next(get_db())
+async def get_portfolio_dashboard(portfolio_id: int, db: Session = Depends(get_db)):
     snap = (
         db.query(PortfolioAnalyticsSnapshot)
         .filter(PortfolioAnalyticsSnapshot.portfolio_id == portfolio_id)
@@ -1018,12 +1003,11 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/instruments/{instrument_id}/snapshot/latest-lite", response_model=LiteSnapshotResponse)
-async def get_latest_lite_snapshot(instrument_id: int):
+async def get_latest_lite_snapshot(instrument_id: int, db: Session = Depends(get_db)):
     """
     Serve from DB if present; otherwise return last known snapshot with stale=true and
     best-effort queue a provider refresh job.
     """
-    db = next(get_db())
     inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
     if not inst:
         raise HTTPException(status_code=404, detail="Instrument not found")
@@ -1068,8 +1052,7 @@ async def get_latest_lite_snapshot(instrument_id: int):
 
 
 @app.post("/api/instruments/{instrument_id}/backfill", response_model=BackfillEnqueueResponse, status_code=202)
-async def enqueue_instrument_backfill(instrument_id: int):
-    db = next(get_db())
+async def enqueue_instrument_backfill(instrument_id: int, db: Session = Depends(get_db)):
     inst = db.query(Instrument).filter(Instrument.id == instrument_id).first()
     if not inst:
         raise HTTPException(status_code=404, detail="Instrument not found")
@@ -1086,8 +1069,9 @@ async def enqueue_instrument_backfill(instrument_id: int):
 
 
 @app.get("/api/watchlists", response_model=list[WatchlistResponse])
-async def list_watchlists(x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")):
-    db = next(get_db())
+async def list_watchlists(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"), db: Session = Depends(get_db)
+):
     user_id = _get_user_id(x_user_id)
     rows = (
         db.query(Watchlist)
@@ -1100,9 +1084,10 @@ async def list_watchlists(x_user_id: Optional[str] = Header(default=None, alias=
 
 @app.post("/api/watchlists", response_model=WatchlistResponse, status_code=201)
 async def create_watchlist(
-    request: CreateWatchlistRequest, x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+    request: CreateWatchlistRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     max_watchlists, _ = _watchlist_limits()
     count = db.query(Watchlist).filter(Watchlist.user_id == user_id).count()
@@ -1117,9 +1102,10 @@ async def create_watchlist(
 
 @app.delete("/api/watchlists/{watchlist_id}", status_code=204)
 async def delete_watchlist(
-    watchlist_id: int, x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+    watchlist_id: int,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user_id).first()
     if not wl:
@@ -1131,9 +1117,10 @@ async def delete_watchlist(
 
 @app.get("/api/watchlists/{watchlist_id}/items", response_model=list[WatchlistItemResponse])
 async def list_watchlist_items(
-    watchlist_id: int, x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+    watchlist_id: int,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user_id).first()
     if not wl:
@@ -1147,8 +1134,8 @@ async def add_watchlist_item(
     watchlist_id: int,
     request: AddWatchlistItemRequest,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user_id).first()
     if not wl:
@@ -1184,8 +1171,8 @@ async def delete_watchlist_item(
     watchlist_id: int,
     item_id: int,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user_id).first()
     if not wl:
@@ -1200,9 +1187,10 @@ async def delete_watchlist_item(
 
 @app.post("/api/watchlists/default/add", response_model=WatchlistItemResponse, status_code=201)
 async def add_to_default_watchlist(
-    request: AddWatchlistItemRequest, x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+    request: AddWatchlistItemRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = _get_or_create_default_watchlist(db, user_id)
     # Reuse existing endpoint logic locally
@@ -1223,9 +1211,10 @@ async def add_to_default_watchlist(
 
 @app.get("/api/watchlists/{watchlist_id}/status", response_model=WatchlistStatusResponse)
 async def get_watchlist_status(
-    watchlist_id: int, x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+    watchlist_id: int,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
 ):
-    db = next(get_db())
     user_id = _get_user_id(x_user_id)
     wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user_id).first()
     if not wl:
