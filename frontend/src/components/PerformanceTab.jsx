@@ -6,6 +6,13 @@ const PerformanceTab = ({ data, mockData, loading }) => {
   const [timeRange, setTimeRange] = useState('1Y')
   const [viewMode, setViewMode] = useState('Table')
 
+  const formatPrice = (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+    // Round to 4 decimals (not truncated), then trim trailing zeros.
+    const rounded = Number(value.toFixed(4))
+    return String(rounded)
+  }
+
   // Generate mock chart data
   const generateChartData = () => {
     const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb']
@@ -99,8 +106,11 @@ const PerformanceTab = ({ data, mockData, loading }) => {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
               <XAxis dataKey="month" stroke="#666" />
-              <YAxis domain={[90, 120]} stroke="#666" />
-              <Tooltip />
+              <YAxis domain={[90, 120]} stroke="#666" tickFormatter={(v) => formatPrice(v)} />
+              <Tooltip
+                formatter={(value, name) => [formatPrice(value), name]}
+                labelFormatter={(label) => `Month: ${label}`}
+              />
               <Line 
                 type="monotone" 
                 dataKey="price" 
