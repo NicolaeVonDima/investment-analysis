@@ -23,11 +23,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
 
   const tabs = [
     'Overview',
-    'Key Data',
-    'Allocation',
-    'Risk Analysis',
-    'Sustainability',
-    'Stock Exchange'
+    'Investment Thesis'
   ]
 
   const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
@@ -277,31 +273,17 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
             priceSeries={priceSeries}
             overview={overview}
             ticker={ticker}
+            companyInfo={{
+              name: lite?.name || instrument?.name || companyName,
+              ticker: ticker,
+              exchange: lite?.exchange || instrument?.exchange,
+              currency: lite?.currency || instrument?.currency
+            }}
           />
         )}
-        {selectedTab === 'Key Data' && (
+        {selectedTab === 'Investment Thesis' && (
           <div className="placeholder-content">
-            <p>Key Data content will be displayed here</p>
-          </div>
-        )}
-        {selectedTab === 'Allocation' && (
-          <div className="placeholder-content">
-            <p>Allocation content will be displayed here</p>
-          </div>
-        )}
-        {selectedTab === 'Risk Analysis' && (
-          <div className="placeholder-content">
-            <p>Risk Analysis content will be displayed here</p>
-          </div>
-        )}
-        {selectedTab === 'Sustainability' && (
-          <div className="placeholder-content">
-            <p>Sustainability content will be displayed here</p>
-          </div>
-        )}
-        {selectedTab === 'Stock Exchange' && (
-          <div className="placeholder-content">
-            <p>Stock Exchange content will be displayed here</p>
+            <p>Investment Thesis content will be displayed here</p>
           </div>
         )}
       </div>

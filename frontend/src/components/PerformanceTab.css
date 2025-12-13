@@ -45,6 +45,57 @@
   color: #666;
 }
 
+.company-summary {
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 32px;
+  border: 1px solid #e5e5e5;
+}
+
+.company-summary-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 16px 0;
+}
+
+.company-summary-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.company-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #666;
+}
+
+.detail-value {
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.company-summary-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #444;
+}
+
+.company-summary-description p {
+  margin: 0;
+}
+
 .chart-container {
   background-color: #fafafa;
   border-radius: 8px;
@@ -100,6 +151,20 @@
   height: 300px;
 }
 
+.price-card .chart-wrapper {
+  height: 344px;
+}
+
+.price-card .chip-row {
+  margin-bottom: 0px;
+  min-height: 16px;
+}
+
+.price-card .panel-error {
+  margin-bottom: 0px;
+  min-height: 8px;
+}
+
 .chip-row {
   display: flex;
   gap: 8px;
@@ -108,6 +173,7 @@
   overflow-y: hidden;
   padding-bottom: 4px;
   margin-bottom: 10px;
+  min-height: 32px;
 }
 
 .chip-row .toggle-btn,

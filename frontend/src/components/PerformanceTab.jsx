@@ -3,7 +3,7 @@ import axios from 'axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import './PerformanceTab.css'
 
-const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker }) => {
+const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker, companyInfo }) => {
   const [timeRange, setTimeRange] = useState('1Y') // Price range: 1Y | Max
   const [fcfRange, setFcfRange] = useState('Quarterly')
   const [kpiRange, setKpiRange] = useState('Quarterly')
@@ -133,8 +133,12 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      // Keep at least one series visible
-      if (next.size === 0) next.add('fcf')
+      // Keep at least one series visible, but only if available
+      if (next.size === 0) {
+        const u = new Set(fundSeries?.unavailable || [])
+        const firstAvailable = seriesMeta.find((m) => !u.has(m.key))
+        if (firstAvailable) next.add(firstAvailable.key)
+      }
       return next
     })
   }
@@ -144,7 +148,11 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      if (next.size === 0) next.add('roe')
+      // Keep at least one KPI visible, but only if available
+      if (next.size === 0) {
+        const firstAvailable = kpiMeta.find((m) => !kpiUnavailable.has(m.key))
+        if (firstAvailable) next.add(firstAvailable.key)
+      }
       return next
     })
   }
@@ -178,7 +186,11 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
     const u = new Set(fundSeries?.unavailable || [])
     setVisibleSeries((prev) => {
       const next = new Set([...prev].filter((k) => !u.has(k)))
-      if (next.size === 0) next.add('fcf')
+      // If all were filtered out, add the first available series (if any)
+      if (next.size === 0) {
+        const firstAvailable = seriesMeta.find((m) => !u.has(m.key))
+        if (firstAvailable) next.add(firstAvailable.key)
+      }
       return next
     })
   }, [fundSeries])
@@ -234,7 +246,11 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
     // Drop unavailable KPIs from active set.
     setVisibleKpis((prev) => {
       const next = new Set([...prev].filter((k) => !kpiUnavailable.has(k)))
-      if (next.size === 0) next.add('roe')
+      // If all were filtered out, add the first available KPI (if any)
+      if (next.size === 0) {
+        const firstAvailable = kpiMeta.find((m) => !kpiUnavailable.has(m.key))
+        if (firstAvailable) next.add(firstAvailable.key)
+      }
       return next
     })
   }, [kpiUnavailable])
@@ -285,33 +301,60 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
         </div>
       </div>
 
+      {companyInfo && (
+        <div className="company-summary">
+          <h2 className="company-summary-title">{companyInfo.name || companyInfo.ticker}</h2>
+          <div className="company-summary-details">
+            {companyInfo.exchange && (
+              <span className="company-detail-item">
+                <span className="detail-label">Exchange:</span>
+                <span className="detail-value">{companyInfo.exchange}</span>
+              </span>
+            )}
+            {companyInfo.currency && (
+              <span className="company-detail-item">
+                <span className="detail-label">Currency:</span>
+                <span className="detail-value">{companyInfo.currency}</span>
+              </span>
+            )}
+            {companyInfo.ticker && (
+              <span className="company-detail-item">
+                <span className="detail-label">Ticker:</span>
+                <span className="detail-value">{companyInfo.ticker}</span>
+              </span>
+            )}
+          </div>
+          <div className="company-summary-description">
+            <p>
+              {companyInfo.description || 
+                `${companyInfo.name || companyInfo.ticker} is a publicly traded company${companyInfo.exchange ? ` listed on the ${companyInfo.exchange}` : ''}. ` +
+                `This overview provides key financial metrics, free cash flow trends, and valuation indicators to help assess the company's financial health and investment potential.`
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="overview-grid">
         <div className="chart-container price-card">
           <div className="section-header">
             <h3>Price</h3>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div className="view-toggle">
-                {['1Y', 'Max'].map((r) => (
-                  <button
-                    key={r}
-                    className={`toggle-btn ${timeRange === r ? 'active' : ''}`}
-                    onClick={() => setTimeRange(r)}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-              <select className="currency-selector">
-                <option>USD</option>
-                <option>EUR</option>
-                <option>GBP</option>
-              </select>
+            <div className="view-toggle">
+              {['1Y', 'Max'].map((r) => (
+                <button
+                  key={r}
+                  className={`toggle-btn ${timeRange === r ? 'active' : ''}`}
+                  onClick={() => setTimeRange(r)}
+                >
+                  {r}
+                </button>
+              ))}
             </div>
           </div>
           <div className="chip-row" />
           <div className="panel-error" />
           <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={344}>
               <LineChart data={chartData} margin={CHART_MARGIN}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="date" stroke="#666" tickFormatter={xTick} minTickGap={24} tickMargin={8} />
