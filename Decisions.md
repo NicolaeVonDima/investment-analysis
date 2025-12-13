@@ -96,3 +96,29 @@ We must prevent nonsense tickers from navigating to Browse and from polluting th
 - Successful provider resolutions are cached and persisted into `provider_symbol_map` with `last_verified_at`.
 
 
+## 2025-12-13 — ADR-0005 — Introduce per-dataset refresh state for Overview fundamentals
+
+Source: [Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf](file://Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf)
+
+### Decision
+Add a new refresh state table keyed by `(instrument_id, dataset_type)` for 24h DB-first caching of composed datasets, starting with:
+- `fundamentals_quarterly`
+- `fundamentals_annual`
+
+### Context
+Overview composes multiple datasets with different refresh cadences and failure modes. We need deterministic “no extra provider calls within 24h” behavior per dataset type.
+
+### Alternatives considered
+- Overloading existing `instrument_refresh` (single-row per instrument):
+  - rejected; cannot represent multiple dataset types without a breaking primary key migration.
+- Using only `provider_refresh_jobs`:
+  - rejected; jobs are request-key oriented, not a stable “last successful refresh pointer” per dataset.
+
+### Consequences
+- Fundamentals refresh is explicit and independently cached from price refresh.
+- Allows partial UI: price can render while fundamentals panels show stale/warnings.
+
+### Notes
+- Alpha Vantage endpoint availability varies by key/tier; for price history we default to free-tier compatible daily series endpoints in the UI layer.
+
+

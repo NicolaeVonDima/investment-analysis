@@ -5,7 +5,7 @@ import WatchlistView from './WatchlistView'
 import './MainContent.css'
 
 const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
-  const [selectedTab, setSelectedTab] = useState(initialTab || 'Performance')
+  const [selectedTab, setSelectedTab] = useState(initialTab || 'Overview')
   const [analysisData, setAnalysisData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [jobId, setJobId] = useState(null)
@@ -17,10 +17,13 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
   const [liteError, setLiteError] = useState(null)
   const [priceSeries, setPriceSeries] = useState(null)
   const [priceSeriesError, setPriceSeriesError] = useState(null)
+  const [overview, setOverview] = useState(null)
+  const [overviewError, setOverviewError] = useState(null)
+  const [overviewRetryTick, setOverviewRetryTick] = useState(0)
 
   const tabs = [
+    'Overview',
     'Key Data',
-    'Performance',
     'Allocation',
     'Risk Analysis',
     'Sustainability',
@@ -89,6 +92,29 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
     }
     run()
   }, [ticker])
+
+  useEffect(() => {
+    // Overview (fundamentals + KPIs) - DB-first with 24h caching on backend
+    const run = async () => {
+      if (!ticker) return
+      setOverviewError(null)
+      try {
+        const res = await axios.get(`${API_URL}/instruments/${encodeURIComponent(ticker)}/overview`)
+        setOverview(res.data)
+        setOverviewError(null)
+      } catch (e) {
+        setOverview(null)
+        setOverviewError(e?.response?.data?.detail || e.message)
+        // One best-effort retry for transient backend reload/network blips.
+        const status = e?.response?.status
+        const shouldRetry = !status || (status >= 500 && status < 600)
+        if (shouldRetry) {
+          setTimeout(() => setOverviewRetryTick((t) => t + 1), 1500)
+        }
+      }
+    }
+    run()
+  }, [ticker, overviewRetryTick])
 
   useEffect(() => {
     // Price series for chart (DB-backed, may do one provider fetch if missing)
@@ -167,6 +193,7 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
             {liteLoading ? 'Loading snapshot…' : liteError ? `Snapshot error: ${liteError}` : null}
             {!liteLoading && !liteError && priceSeriesError ? <span>{` • Chart data error: ${priceSeriesError}`}</span> : null}
+            {!liteLoading && !liteError && overviewError ? <span>{` • Overview error: ${overviewError}`}</span> : null}
             {!liteLoading && !liteError && lite ? (
               <>
                 <span>{lite.stale ? 'Stale' : 'Fresh'}</span>
@@ -242,12 +269,13 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
       </div>
 
       <div className="tab-content">
-        {selectedTab === 'Performance' && (
+        {selectedTab === 'Overview' && (
           <PerformanceTab 
             data={analysisData} 
             mockData={mockData}
             loading={loading}
             priceSeries={priceSeries}
+            overview={overview}
           />
         )}
         {selectedTab === 'Key Data' && (

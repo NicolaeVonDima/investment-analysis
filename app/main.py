@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import date as date_type
 import zlib
 import time
@@ -36,6 +36,7 @@ from app.models import (
     ProviderSymbolSearchCache,
     PriceEOD,
     InstrumentRefresh,
+    InstrumentDatasetRefresh,
 )
 from app.worker.tasks import process_analysis_task
 from app.api_schemas import (
@@ -61,9 +62,19 @@ from app.api_schemas import (
     BrowseLiteResponse,
     PriceSeriesResponse,
     PricePoint,
+    OverviewResponse,
+    OverviewDatasetStatus,
+    OverviewFcfPoint,
+    OverviewKpiPoint,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
+from app.services.overview import (
+    compute_fcf_series,
+    compute_kpis,
+    load_fundamentals_snapshots,
+    refresh_fundamentals_bundle,
+)
 from app.services.ticker_resolution import (
     SYMBOL_SEARCH_TTL,
     choose_best_match,
@@ -1105,6 +1116,115 @@ async def get_price_series(ticker: str, limit: int = 260, db: Session = Depends(
     points = [PricePoint(as_of_date=d, close=by_date[d].close) for d in sorted(by_date.keys())]
 
     return PriceSeriesResponse(ticker=inst.canonical_symbol, instrument_id=inst.id, points=points)
+
+
+@app.get("/api/instruments/{ticker}/overview", response_model=OverviewResponse)
+async def get_overview(ticker: str, db: Session = Depends(get_db)):
+    """
+    Overview composition: price + FCF + KPI panels.
+    Applies 24h DB-first caching per dataset type.
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    mapping = (
+        db.query(ProviderSymbolMap)
+        .filter(ProviderSymbolMap.provider == "alpha_vantage", ProviderSymbolMap.provider_symbol == t)
+        .first()
+    )
+    inst = None
+    if mapping:
+        inst = db.query(Instrument).filter(Instrument.id == mapping.instrument_id).first()
+    if not inst:
+        inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+
+    now = datetime.utcnow()
+
+    # Price: use existing price_eod latest (populated via browse-lite/prices); do not force provider call here.
+    latest_price = (
+        db.query(PriceEOD)
+        .filter(PriceEOD.instrument_id == inst.id)
+        .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
+        .first()
+    )
+    as_of_date = latest_price.as_of_date if latest_price else None
+    close = latest_price.close if latest_price else None
+
+    # Fundamentals refresh (quarterly + annual)
+    from app.services.alpha_vantage_client import AlphaVantageClient
+
+    client = AlphaVantageClient()
+
+    def fetch_all():
+        return {
+            "cash_flow": client.get_cash_flow(inst.canonical_symbol),
+            "income_statement": client.get_income_statement(inst.canonical_symbol),
+            "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
+        }
+
+    q_meta, a_meta = refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+
+    # Load snapshots
+    q_cf = load_fundamentals_snapshots(db, inst.id, "cash_flow", "quarterly", limit=12)
+    q_is = load_fundamentals_snapshots(db, inst.id, "income_statement", "quarterly", limit=12)
+    q_bs = load_fundamentals_snapshots(db, inst.id, "balance_sheet", "quarterly", limit=12)
+
+    a_cf = load_fundamentals_snapshots(db, inst.id, "cash_flow", "annual", limit=10)
+    a_is = load_fundamentals_snapshots(db, inst.id, "income_statement", "annual", limit=10)
+    a_bs = load_fundamentals_snapshots(db, inst.id, "balance_sheet", "annual", limit=10)
+
+    q_fcf = compute_fcf_series(q_cf, q_is)
+    a_fcf = compute_fcf_series(a_cf, a_is)
+
+    q_kpis = compute_kpis(q_is, q_bs, q_fcf)
+    a_kpis = compute_kpis(a_is, a_bs, a_fcf)
+
+    def ds_status(dataset_type: str, meta: dict) -> OverviewDatasetStatus:
+        last_refresh_at = meta.get("last_refresh_at")
+        last_refresh_str = last_refresh_at.isoformat() if last_refresh_at else None
+        stale = not (meta.get("last_status") == "success" and meta.get("last_refresh_at") and (now - meta.get("last_refresh_at")) < timedelta(hours=24))
+        return OverviewDatasetStatus(
+            dataset_type=dataset_type,
+            last_refresh_at=last_refresh_str,
+            last_status=meta.get("last_status"),
+            last_error=meta.get("last_error"),
+            stale=stale,
+        )
+
+    return OverviewResponse(
+        ticker=inst.canonical_symbol,
+        instrument_id=inst.id,
+        as_of_date=as_of_date,
+        close=close,
+        fcf_quarterly=[OverviewFcfPoint(period_end=p.period_end, fcf=p.fcf, revenue=p.revenue, fcf_margin=p.fcf_margin) for p in q_fcf],
+        fcf_annual=[OverviewFcfPoint(period_end=p.period_end, fcf=p.fcf, revenue=p.revenue, fcf_margin=p.fcf_margin) for p in a_fcf],
+        kpis_quarterly=[
+            OverviewKpiPoint(
+                period_end=p.period_end,
+                roe=p.roe,
+                net_margin=p.net_margin,
+                operating_margin=p.operating_margin,
+                fcf_margin=p.fcf_margin,
+                debt_to_equity=p.debt_to_equity,
+            )
+            for p in q_kpis
+        ],
+        kpis_annual=[
+            OverviewKpiPoint(
+                period_end=p.period_end,
+                roe=p.roe,
+                net_margin=p.net_margin,
+                operating_margin=p.operating_margin,
+                fcf_margin=p.fcf_margin,
+                debt_to_equity=p.debt_to_equity,
+            )
+            for p in a_kpis
+        ],
+        datasets=[ds_status("fundamentals_quarterly", q_meta), ds_status("fundamentals_annual", a_meta)],
+    )
 
 
 @app.get("/api/instruments/{instrument_id}/snapshot/latest-lite", response_model=LiteSnapshotResponse)

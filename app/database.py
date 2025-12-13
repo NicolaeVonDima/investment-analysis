@@ -116,6 +116,28 @@ def init_db():
                         "ON instrument_refresh (last_refresh_at)"
                     )
                 )
+
+                # instrument_dataset_refresh table (per-dataset 24h cache state for composed views)
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS instrument_dataset_refresh ("
+                        "instrument_id INTEGER NOT NULL REFERENCES instruments(id) ON DELETE CASCADE, "
+                        "dataset_type VARCHAR(64) NOT NULL, "
+                        "last_refresh_at TIMESTAMPTZ NULL, "
+                        "last_status VARCHAR(32) NULL, "
+                        "last_error TEXT NULL, "
+                        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
+                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
+                        "PRIMARY KEY (instrument_id, dataset_type)"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_instrument_dataset_refresh_last_refresh_at "
+                        "ON instrument_dataset_refresh (last_refresh_at)"
+                    )
+                )
             elif dialect == "sqlite":
                 # SQLite supports ADD COLUMN but not IF NOT EXISTS; run best-effort.
                 try:
@@ -125,6 +147,33 @@ def init_db():
                 try:
                     conn.execute(
                         text("CREATE INDEX IF NOT EXISTS ix_provider_symbol_map_last_verified_at ON provider_symbol_map (last_verified_at)")
+                    )
+                except Exception:
+                    pass
+                # instrument_dataset_refresh for SQLite (create_all will create for fresh DBs; add best-effort for existing)
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE TABLE IF NOT EXISTS instrument_dataset_refresh ("
+                            "instrument_id INTEGER NOT NULL, "
+                            "dataset_type VARCHAR(64) NOT NULL, "
+                            "last_refresh_at DATETIME NULL, "
+                            "last_status VARCHAR(32) NULL, "
+                            "last_error TEXT NULL, "
+                            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                            "PRIMARY KEY (instrument_id, dataset_type)"
+                            ")"
+                        )
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_instrument_dataset_refresh_last_refresh_at "
+                            "ON instrument_dataset_refresh (last_refresh_at)"
+                        )
                     )
                 except Exception:
                     pass

@@ -58,7 +58,7 @@ function App() {
         </div>
       )
     }
-    return <MainContent ticker={resolvedTicker} selectedNav="Browse" selectedTab="Performance" />
+    return <MainContent ticker={resolvedTicker} selectedNav="Browse" selectedTab="Overview" />
   }
 
   return (
@@ -67,7 +67,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/browse/ADBE" replace />} />
         <Route path="/browse/:ticker" element={<BrowseRoute />} />
-        <Route path="/watchlist" element={<MainContent selectedNav="Watchlist" selectedTab="Performance" />} />
+        <Route path="/watchlist" element={<MainContent selectedNav="Watchlist" selectedTab="Overview" />} />
         <Route path="*" element={<Navigate to="/browse/ADBE" replace />} />
       </Routes>
     </div>

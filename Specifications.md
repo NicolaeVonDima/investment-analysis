@@ -174,3 +174,29 @@ Source: [Spec_Ticker_Search_Validation_and_Browse_Guard.pdf](file://Spec_Ticker_
 - Browse route guard:
   - resolve first → if fail show Not Found UI → do not call browse-lite
 
+
+## 2025-12-13 — v1.5.0 — Overview Tab (Default) + Free Cash Flow + Buffett-style KPI Panels
+
+Source: [Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf](file://Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf)
+
+### Objective
+- Rename tab **Performance → Overview** and make it the **default** tab on `/browse/{ticker}`.
+- In Overview, keep headline price + as-of date, and add:
+  - **Panel A (FCF)**: quarterly + yearly Free Cash Flow view
+  - **Panel B (KPIs)**: Buffett-style KPI panel with **Quarterly/Yearly** toggle (Quarterly default)
+
+### Data requirements
+- FCF derived from cash flow statement fields:
+  - `FreeCashFlow = operatingCashflow - capitalExpenditures`
+- KPIs derived from statements:
+  - ROE, Net Margin, Operating Margin, FCF Margin, Debt/Equity
+- Raw statements are stored as immutable `fundamentals_snapshot` rows with provider metadata.
+
+### API (internal)
+- `GET /api/instruments/{ticker}/overview`
+  - returns latest price snapshot + FCF series + KPI values/series + as-of metadata per dataset
+
+### Refresh policy
+- DB-first: if refreshed within 24h per dataset type, serve from DB and do not call provider.
+- If stale/missing: call provider, persist immutable snapshots, return updated view.
+

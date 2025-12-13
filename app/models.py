@@ -557,3 +557,25 @@ class InstrumentRefresh(Base):
 
     instrument = relationship("Instrument")
 
+
+class InstrumentDatasetRefresh(Base):
+    """
+    Per-instrument, per-dataset refresh state to enforce 24h DB-first caching for composed views.
+    """
+
+    __tablename__ = "instrument_dataset_refresh"
+
+    instrument_id = Column(
+        Integer, ForeignKey("instruments.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    dataset_type = Column(String(64), primary_key=True, index=True)  # fundamentals_quarterly|fundamentals_annual|...
+
+    last_refresh_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_status = Column(String(32), nullable=True)  # success|failed
+    last_error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+

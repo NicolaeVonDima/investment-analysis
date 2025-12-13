@@ -197,3 +197,42 @@ class PriceSeriesResponse(BaseModel):
     points: List[PricePoint]
 
 
+class OverviewFcfPoint(BaseModel):
+    period_end: date
+    fcf: Optional[float] = None
+    revenue: Optional[float] = None
+    fcf_margin: Optional[float] = None
+
+
+class OverviewKpiPoint(BaseModel):
+    period_end: date
+    roe: Optional[float] = None
+    net_margin: Optional[float] = None
+    operating_margin: Optional[float] = None
+    fcf_margin: Optional[float] = None
+    debt_to_equity: Optional[float] = None
+
+
+class OverviewDatasetStatus(BaseModel):
+    dataset_type: str
+    last_refresh_at: Optional[str] = None
+    last_status: Optional[str] = None
+    last_error: Optional[str] = None
+    stale: bool
+
+
+class OverviewResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    as_of_date: Optional[date] = None
+    close: Optional[float] = None
+
+    fcf_quarterly: List[OverviewFcfPoint] = []
+    fcf_annual: List[OverviewFcfPoint] = []
+
+    kpis_quarterly: List[OverviewKpiPoint] = []
+    kpis_annual: List[OverviewKpiPoint] = []
+
+    datasets: List[OverviewDatasetStatus] = []
+
+

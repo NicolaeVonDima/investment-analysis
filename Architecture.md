@@ -95,3 +95,23 @@ Source: [Spec_Ticker_Search_Validation_and_Browse_Guard.pdf](file://Spec_Ticker_
 ### Caching
 - Provider symbol search results cached in DB for 24h to reduce calls.
 
+
+## 2025-12-13 — v1.5.0 — Overview composition (price + fundamentals)
+
+Source: [Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf](file://Spec_Overview_Tab_FCF_and_Valuation_KPIs.pdf)
+
+### Composition endpoint
+- Add `GET /api/instruments/{ticker}/overview` which composes:
+  - price (EOD close + as-of date)
+  - cash flow-derived FCF series
+  - KPI series derived from income statement + balance sheet
+
+### Persistence & auditability
+- Fundamentals are stored as immutable `fundamentals_snapshot` rows:
+  - keyed by `(instrument_id, statement_type, frequency, period_end)`
+  - include provider + fetched-at metadata
+
+### Freshness (24h DB-first)
+- Track refresh by dataset type (e.g., fundamentals_quarterly / fundamentals_annual) to avoid repeated provider calls.
+- Serve partial data when provider errors occur; UI shows per-panel warnings.
+

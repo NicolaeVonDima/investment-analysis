@@ -85,4 +85,18 @@
 ### Tests
 - `pytest`: PASS
 
+## 2025-12-13 — Status Update (v1.5.0 Overview + FCF + KPI panels)
+
+### Done
+- UI: renamed **Performance → Overview**, made it the default tab on `/browse/:ticker`.
+- Overview now shows:
+  - price headline + EOD as-of date
+  - **FCF** panel (Quarterly/Yearly)
+  - **Buffett-style KPI** panel (Quarterly default; Yearly toggle)
+- Backend: added `GET /api/instruments/{ticker}/overview` composing price + fundamentals + KPI series with 24h DB-first caching per dataset.
+- Persistence: added per-dataset refresh tracking for fundamentals via `instrument_dataset_refresh`.
+
+### Tests
+- `pytest`: PASS
+
 
