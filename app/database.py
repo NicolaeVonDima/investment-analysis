@@ -53,8 +53,10 @@ def init_db():
                 )
             )
 
-            # Best-effort schema upgrades for existing Postgres databases (v1.4.0).
-            # Keep Docker-first behavior robust without requiring manual migrations for now.
+            # Best-effort schema upgrades for existing databases.
+            # NOTE: SQLAlchemy create_all won't ALTER existing tables.
+            #
+            # Keep local dev (SQLite) and Docker (Postgres) robust without manual migrations for now.
             if dialect == "postgresql":
                 # provider_symbol_map.last_verified_at
                 conn.execute(
@@ -114,6 +116,18 @@ def init_db():
                         "ON instrument_refresh (last_refresh_at)"
                     )
                 )
+            elif dialect == "sqlite":
+                # SQLite supports ADD COLUMN but not IF NOT EXISTS; run best-effort.
+                try:
+                    conn.execute(text("ALTER TABLE provider_symbol_map ADD COLUMN last_verified_at DATETIME NULL"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_provider_symbol_map_last_verified_at ON provider_symbol_map (last_verified_at)")
+                    )
+                except Exception:
+                    pass
     except Exception:
         # Best-effort; do not prevent app startup due to index creation.
         pass

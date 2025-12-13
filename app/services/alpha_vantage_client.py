@@ -32,16 +32,19 @@ class AlphaVantageConfig:
 
 class AlphaVantageClient:
     def __init__(self, config: Optional[AlphaVantageConfig] = None, session: Optional[requests.Session] = None):
+        self.mock_enabled = (os.getenv("ALPHAVANTAGE_MOCK") or "").strip() in ("1", "true", "TRUE", "yes", "YES")
         if config is None:
             api_key = (os.getenv("ALPHAVANTAGE_API_KEY") or "").strip()
-            if not api_key:
+            if not api_key and not self.mock_enabled:
                 raise ValueError("ALPHAVANTAGE_API_KEY is not set")
-            config = AlphaVantageConfig(api_key=api_key)
+            config = AlphaVantageConfig(api_key=(api_key or "MOCK"))
         self.config = config
         self.session = session or requests.Session()
         self._last_call_ts: Optional[float] = None
 
     def _throttle(self):
+        if self.mock_enabled:
+            return
         if self._last_call_ts is None:
             return
         elapsed = time.time() - self._last_call_ts
@@ -50,6 +53,11 @@ class AlphaVantageClient:
             time.sleep(sleep_for)
 
     def _get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        if self.mock_enabled:
+            from app.services.alpha_vantage_mock import mock_response
+
+            fn = params.get("function")
+            return mock_response(fn, params)
         self._throttle()
         params = {**params, "apikey": self.config.api_key}
         resp = self.session.get(self.config.base_url, params=params, timeout=30)

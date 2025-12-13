@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
       ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
+      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -45,6 +46,7 @@ services:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
       ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
+      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -67,6 +69,7 @@ services:
       WATCHLIST_REFRESH_HOUR: "2"
       WATCHLIST_REFRESH_MINUTE: "0"
       ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
+      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -96,12 +99,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      VITE_API_URL: http://localhost:8000/api
+      # Browser-facing origin for the API (frontend code appends /api internally).
+      VITE_API_URL: http://localhost:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    depends_on:
-      - web
     command: npm run dev -- --host
 
 volumes:

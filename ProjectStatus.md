@@ -76,4 +76,13 @@
 ### Notes
 - Existing Postgres installs are upgraded best-effort on startup via `init_db()` DDL for v1.4.0 tables/columns (no Alembic yet).
 
+## 2025-12-13 — Status Update (debugging: mock Alpha Vantage)
+
+### Done
+- Added `ALPHAVANTAGE_MOCK=1` mode to return deterministic local fixtures (no network calls; no API key required).
+- Intended for UI/API debugging without consuming provider credits.
+
+### Tests
+- `pytest`: PASS
+
 

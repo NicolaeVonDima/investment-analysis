@@ -10,6 +10,11 @@ Source: [Spec_DataProvider_AlphaVantage_Composable_Fetch.pdf](file://Spec_DataPr
 - **Env var**: `ALPHAVANTAGE_API_KEY`
 - **Local config**: keep secrets in a local env file (not committed), e.g. `config/alpha_vantage.secrets.env`
 
+### Local debugging (no-credit mock mode)
+- **Env var**: `ALPHAVANTAGE_MOCK=1`
+- When enabled, the app uses deterministic local fixtures for Alpha Vantage endpoints (no network calls; no API key required).
+- Intended for UI/API debugging without consuming free-tier credits.
+
 ### Refresh cadence
 - **UI-lite**: serve from DB if present; otherwise queue refresh and return last snapshot with staleness.
 - **Backfill**: on-demand async job; stores >=5y daily adjusted EOD and fundamentals where available.
