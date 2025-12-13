@@ -16,21 +16,29 @@ function App() {
     const API_URL = `${API_ROOT}/api`
 
     useEffect(() => {
+      const controller = new AbortController()
       const run = async () => {
         setLoading(true)
         setError(null)
         setResolvedTicker(null)
         try {
-          const res = await axios.post(`${API_URL}/instruments/resolve`, { query: ticker })
+          const res = await axios.post(
+            `${API_URL}/instruments/resolve`,
+            { query: ticker },
+            { signal: controller.signal, timeout: 35000 }
+          )
           setResolvedTicker(res.data?.ticker || ticker)
         } catch (e) {
+          if (axios.isCancel?.(e) || e?.code === 'ERR_CANCELED') return
           const detail = e?.response?.data?.detail
-          setError(detail?.message || 'Ticker not found')
+          const msg = detail?.message || (e?.code === 'ECONNABORTED' ? 'Validation timed out' : 'Ticker not found')
+          setError(msg)
         } finally {
           setLoading(false)
         }
       }
       if (ticker) run()
+      return () => controller.abort()
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ticker])
 

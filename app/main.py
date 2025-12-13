@@ -3,7 +3,7 @@ Main FastAPI application for investment analysis platform.
 Handles user input, orchestration, and document delivery.
 """
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -15,6 +15,7 @@ import zlib
 import time
 import logging
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
 from app.models import (
@@ -571,13 +572,12 @@ async def get_watchlist_config():
 
 
 @app.post("/api/instruments/resolve", response_model=ResolveInstrumentSuccessResponse)
-async def resolve_instrument(request: ResolveInstrumentRequest):
+async def resolve_instrument(request: ResolveInstrumentRequest, db: Session = Depends(get_db)):
     """
     Resolve an input symbol to a canonical instrument.
     Prefer DB/provider maps; otherwise use provider SYMBOL_SEARCH.
     Must NOT create instruments for invalid or not-found tickers.
     """
-    db = next(get_db())
     raw = request.query or request.symbol or ""
     q = normalize_query(raw)
     t0 = time.perf_counter()
@@ -836,13 +836,12 @@ def _maybe_acquire_ticker_lock(db, ticker: str):
 
 
 @app.get("/api/instruments/{ticker}/browse-lite", response_model=BrowseLiteResponse)
-async def browse_lite(ticker: str):
+async def browse_lite(ticker: str, db: Session = Depends(get_db)):
     """
     24h cache:
     - If last_refresh_at < 24h: serve DB only.
     - Else: refresh from Alpha Vantage, persist, update last_refresh_at, and return updated snapshot.
     """
-    db = next(get_db())
     t = ticker.upper().strip()
     if not t.replace(".", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid ticker format")

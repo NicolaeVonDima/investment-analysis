@@ -27,14 +27,16 @@ const Sidebar = () => {
     if (e.key !== 'Enter') return
     const q = searchQuery.trim()
     if (!q) return
+    const controller = new AbortController()
     setSearchLoading(true)
     setSearchError(null)
     setSuggestions([])
     try {
-      const res = await axios.post(`${API_URL}/instruments/resolve`, { query: q })
+      const res = await axios.post(`${API_URL}/instruments/resolve`, { query: q }, { signal: controller.signal, timeout: 35000 })
       const ticker = res.data?.ticker || q.toUpperCase()
       navigate(`/browse/${encodeURIComponent(ticker)}`)
     } catch (err) {
+      if (axios.isCancel?.(err) || err?.code === 'ERR_CANCELED') return
       const detail = err?.response?.data?.detail
       const msg = detail?.message || 'Ticker not found'
       setSearchError(msg)
