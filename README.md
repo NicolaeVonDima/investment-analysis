@@ -11,6 +11,7 @@ The platform consists of:
 - **Database** (PostgreSQL): Stores analysis requests and results
 - **Worker Service** (Celery): Background processing for data fetching, metric computation, narrative generation, and PDF rendering
 - **Redis**: Task queue broker for Celery
+- **n8n** (optional): Workflow automation platform for webhooks, external integrations, and automated workflows
 
 All services run locally via Docker Compose and are designed to scale independently in cloud deployments.
 
@@ -45,6 +46,7 @@ docker-compose up --build
 3. Access the application:
 - **Web UI**: `http://localhost:3000` - Modern React-based interface
 - **API**: `http://localhost:8000` - REST API endpoints
+- **n8n**: `http://localhost:5678` - Workflow automation (optional; default credentials: admin/changeme)
 
 ### API Documentation
 

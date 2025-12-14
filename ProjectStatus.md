@@ -117,3 +117,25 @@
 - Overview grid now supports 3-up cards (Price + FCF + KPIs) on wide screens.
 
 
+## 2025-12-13 — Status Update (v1.7.0 n8n integration)
+
+### Done
+- Added **n8n** workflow automation service to `docker-compose.yml`
+- Configured n8n with:
+  - Persistent Docker volume for workflow storage
+  - Basic authentication (configurable via environment variables)
+  - Port 5678 exposed
+  - Optional PostgreSQL backend (commented out; defaults to file-based storage)
+- Updated Architecture.md to document n8n integration
+- Added ADR-0007 to Decisions.md explaining the n8n integration decision
+
+### Access
+- n8n UI available at `http://localhost:5678` after `docker-compose up`
+- Default credentials: `admin` / `changeme` (should be changed via environment variables)
+
+### Notes
+- n8n is an optional service; core platform functionality is independent
+- Workflows can be used for webhooks, external integrations, and automation
+- See Architecture.md v1.7.0 for integration points and usage patterns
+
+

@@ -127,3 +127,34 @@ Source: [Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf](file://Spec_FCF_MultiKPI_C
 - DB-first: read from `fundamentals_snapshot` when fundamentals refresh is < 24h.
 - Otherwise: refresh fundamentals bundle (CF/IS/BS) once, persist immutable snapshots, then compute aligned series.
 
+
+## 2025-12-13 — v1.7.0 — n8n Workflow Automation Integration
+
+### Overview
+Added **n8n** (self-hosted workflow automation platform) as an optional service for orchestrating external integrations, webhooks, and automated workflows that complement the core investment analysis platform.
+
+### Service Configuration
+- **n8n** (Docker): Self-hosted workflow automation tool
+  - Accessible at `http://localhost:5678`
+  - Basic authentication enabled (configurable via environment variables)
+  - Persistent storage via Docker volume (`n8n_data`)
+  - Optional PostgreSQL backend (commented out; can use file-based storage by default)
+
+### Integration Points
+- n8n can be used to:
+  - Trigger analysis workflows via webhooks
+  - Integrate with external data providers beyond Alpha Vantage
+  - Automate notifications and reporting
+  - Orchestrate multi-step data pipelines
+  - Connect to third-party services (Slack, email, etc.)
+
+### Storage
+- Workflows and credentials stored in Docker volume `n8n_data`
+- Can optionally use shared PostgreSQL database (requires separate `n8n` database schema)
+- File-based storage is the default for simplicity
+
+### Notes
+- n8n is an optional service; core platform functionality does not depend on it
+- Authentication credentials should be set via environment variables (`N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`)
+- Webhook URLs default to `http://localhost:5678/` (adjust `WEBHOOK_URL` for production deployments)
+

@@ -48,3 +48,6 @@ logs/
 .DS_Store
 Thumbs.db
 
+# n8n
+.n8n/
+

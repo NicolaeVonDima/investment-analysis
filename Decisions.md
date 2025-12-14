@@ -138,3 +138,32 @@ The Overview UI needs multiple KPI lines (FCF + additional KPIs) over the same t
 - Allows DB-first 24h caching via existing fundamentals refresh tracking.
 
 
+## 2025-12-13 — ADR-0007 — Add n8n workflow automation platform
+
+### Decision
+Add **n8n** (self-hosted workflow automation) as an optional Docker service to enable:
+- Webhook-triggered workflows
+- External service integrations
+- Automated notifications and reporting
+- Multi-step data pipeline orchestration
+
+### Context
+The platform may benefit from workflow automation for:
+- Triggering analysis jobs from external events
+- Integrating with additional data providers beyond Alpha Vantage
+- Automating notifications (email, Slack, etc.) for watchlist updates or analysis completions
+- Orchestrating complex multi-step processes that span multiple services
+
+### Alternatives considered
+- **Zapier/Make.com**: rejected; requires external SaaS dependency and may not align with self-hosted, auditability-first principles.
+- **Custom workflow engine**: rejected; n8n provides mature, well-maintained solution without reinventing the wheel.
+- **Airflow**: rejected; overkill for simple workflows; n8n is more user-friendly for non-technical users.
+
+### Consequences
+- Optional service; core platform remains independent
+- Adds Docker volume for workflow persistence
+- Enables extensibility without modifying core codebase
+- Basic authentication required (configurable via environment variables)
+- Can optionally use shared PostgreSQL database or file-based storage
+
+
