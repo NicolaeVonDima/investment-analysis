@@ -37,6 +37,10 @@ from app.models import (
     PriceEOD,
     InstrumentRefresh,
     InstrumentDatasetRefresh,
+    InvestmentThesis,
+    SecArtifact,
+    SecArtifactKind,
+    SecParseJob,
 )
 from app.worker.tasks import process_analysis_task
 from app.api_schemas import (
@@ -60,6 +64,8 @@ from app.api_schemas import (
     LiteSnapshotResponse,
     BackfillEnqueueResponse,
     BrowseLiteResponse,
+    CreateInvestmentThesisRequest,
+    InvestmentThesisResponse,
     PriceSeriesResponse,
     PricePoint,
     OverviewResponse,
@@ -68,6 +74,11 @@ from app.api_schemas import (
     OverviewKpiPoint,
     FundamentalsSeriesResponse,
     FundamentalsSeriesPoint,
+    CreateInvestmentThesisRequest,
+    InvestmentThesisResponse,
+    SecIngestResponse,
+    SecFilingListResponse,
+    SecFilingSummary,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
@@ -85,6 +96,7 @@ from app.services.ticker_resolution import (
     parse_symbol_search_matches,
     valid_ticker_format,
 )
+from app.services.sec_ingestion import ingest_sec_filings_for_ticker, resolve_cik_for_ticker
 
 logger = logging.getLogger("app.ticker_resolution")
 
@@ -95,8 +107,18 @@ app = FastAPI(
 )
 
 # CORS (frontend dev server runs on a different origin)
-_cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
-_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+# For local development, it is safe and much simpler to allow all origins.
+# If you need to lock this down later, set CORS_ALLOW_ORIGINS explicitly.
+_cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS")
+if _cors_origins_env:
+    if _cors_origins_env.strip() == "*":
+        _cors_origins = ["*"]
+    else:
+        _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+else:
+    # Default to permissive "*" in dev to avoid confusing silent CORS issues.
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -877,7 +899,10 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
     )
 
     if is_fresh(refresh.last_refresh_at, now) and latest:
-        staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+        last_ref = refresh.last_refresh_at
+        if last_ref is not None and last_ref.tzinfo is not None:
+            last_ref = last_ref.replace(tzinfo=None)
+        staleness_hours = (now - last_ref).total_seconds() / 3600.0 if last_ref else None
         return BrowseLiteResponse(
             ticker=inst.canonical_symbol,
             instrument_id=inst.id,
@@ -905,7 +930,10 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
         .first()
     )
     if is_fresh(refresh.last_refresh_at, now) and latest:
-        staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+        last_ref = refresh.last_refresh_at
+        if last_ref is not None and last_ref.tzinfo is not None:
+            last_ref = last_ref.replace(tzinfo=None)
+        staleness_hours = (now - last_ref).total_seconds() / 3600.0 if last_ref else None
         return BrowseLiteResponse(
             ticker=inst.canonical_symbol,
             instrument_id=inst.id,
@@ -966,7 +994,10 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
             refresh.last_error = None
             db.commit()
 
-            staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+            last_ref = refresh.last_refresh_at
+            if last_ref is not None and last_ref.tzinfo is not None:
+                last_ref = last_ref.replace(tzinfo=None)
+            staleness_hours = (now - last_ref).total_seconds() / 3600.0 if last_ref else None
             return BrowseLiteResponse(
                 ticker=inst.canonical_symbol,
                 instrument_id=inst.id,
@@ -1002,7 +1033,10 @@ async def browse_lite(ticker: str, db: Session = Depends(get_db)):
         .order_by(PriceEOD.as_of_date.desc(), PriceEOD.fetched_at.desc())
         .first()
     )
-    staleness_hours = (now - refresh.last_refresh_at).total_seconds() / 3600.0 if refresh.last_refresh_at else None
+    last_ref = refresh.last_refresh_at
+    if last_ref is not None and last_ref.tzinfo is not None:
+        last_ref = last_ref.replace(tzinfo=None)
+    staleness_hours = (now - last_ref).total_seconds() / 3600.0 if last_ref else None
     return BrowseLiteResponse(
         ticker=inst.canonical_symbol,
         instrument_id=inst.id,
@@ -1159,16 +1193,27 @@ async def get_overview(ticker: str, db: Session = Depends(get_db)):
     # Fundamentals refresh (quarterly + annual)
     from app.services.alpha_vantage_client import AlphaVantageClient
 
-    client = AlphaVantageClient()
+    # Default meta in case provider calls fail; we still want a 200 with error info,
+    # not a silent 500.
+    q_meta: dict[str, Any] = {"last_status": "failed", "last_error": None, "last_refresh_at": None}
+    a_meta: dict[str, Any] = {"last_status": "failed", "last_error": None, "last_refresh_at": None}
 
-    def fetch_all():
-        return {
-            "cash_flow": client.get_cash_flow(inst.canonical_symbol),
-            "income_statement": client.get_income_statement(inst.canonical_symbol),
-            "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
-        }
+    try:
+        client = AlphaVantageClient()
 
-    q_meta, a_meta = refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+        def fetch_all():
+            return {
+                "cash_flow": client.get_cash_flow(inst.canonical_symbol),
+                "income_statement": client.get_income_statement(inst.canonical_symbol),
+                "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
+            }
+
+        q_meta, a_meta = refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+    except Exception as e:
+        # Preserve any existing snapshots; just mark meta as failed.
+        msg = str(e)
+        q_meta = {**q_meta, "last_error": msg}
+        a_meta = {**a_meta, "last_error": msg}
 
     # Load snapshots
     q_cf = load_fundamentals_snapshots(db, inst.id, "cash_flow", "quarterly", limit=12)
@@ -1273,17 +1318,21 @@ async def get_fundamentals_series(
 
     from app.services.alpha_vantage_client import AlphaVantageClient
 
-    client = AlphaVantageClient()
+    try:
+        client = AlphaVantageClient()
 
-    def fetch_all():
-        return {
-            "cash_flow": client.get_cash_flow(inst.canonical_symbol),
-            "income_statement": client.get_income_statement(inst.canonical_symbol),
-            "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
-        }
+        def fetch_all():
+            return {
+                "cash_flow": client.get_cash_flow(inst.canonical_symbol),
+                "income_statement": client.get_income_statement(inst.canonical_symbol),
+                "balance_sheet": client.get_balance_sheet(inst.canonical_symbol),
+            }
 
-    # Refresh both quarterly and annual together to avoid duplicate provider calls.
-    refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+        # Refresh both quarterly and annual together to avoid duplicate provider calls.
+        refresh_fundamentals_bundle(db, inst.id, now, fetch_all)
+    except Exception:
+        # Best-effort: fall back to whatever fundamentals snapshots already exist.
+        pass
 
     # Load snapshots for requested period
     freq = "quarterly" if p == "quarterly" else "annual"
@@ -1376,6 +1425,136 @@ async def enqueue_instrument_backfill(instrument_id: int, db: Session = Depends(
         pass
 
     return BackfillEnqueueResponse(instrument_id=inst.id, status="queued", request_key=request_key, job_id=None)
+
+
+# ---------------------------------------------------------------------------
+# SEC EDGAR ingestion / parse (10-K / 10-Q)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/sec/{ticker}/ingest", response_model=SecIngestResponse)
+async def sec_ingest_filings(ticker: str, db: Session = Depends(get_db)):
+    """
+    Trigger SEC 10-K / 10-Q ingestion for a single ticker.
+
+    This endpoint runs ingestion synchronously (V0) and:
+    - resolves CIK,
+    - discovers eligible filings,
+    - downloads primary documents and registers RAW_FILING artifacts,
+    - creates PARSE_FILING jobs for new artifacts.
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    try:
+        result = ingest_sec_filings_for_ticker(db, t)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return SecIngestResponse(**result)
+
+
+@app.get("/api/sec/{ticker}/filings", response_model=SecFilingListResponse)
+async def list_sec_filings(ticker: str, db: Session = Depends(get_db)):
+    """
+    List SEC filing artifacts (raw + parsed) for a ticker, including parse job status.
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        # Attempt lazy CIK resolution + instrument creation
+        try:
+            cik = resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument/CIK not found for ticker")
+    cik = inst.cik
+    if not cik:
+        try:
+            cik = resolve_cik_for_ticker(db, t)
+        except Exception:
+            raise HTTPException(status_code=404, detail="CIK not found for ticker")
+
+    artifacts = (
+        db.query(SecArtifact)
+        .filter(SecArtifact.cik == cik)
+        .order_by(SecArtifact.filing_date.desc(), SecArtifact.accession_number.desc(), SecArtifact.artifact_kind)
+        .all()
+    )
+
+    # Preload parse jobs keyed by artifact id
+    jobs = (
+        db.query(SecParseJob)
+        .filter(SecParseJob.artifact_id.in_([a.id for a in artifacts]))
+        .all()
+        if artifacts
+        else []
+    )
+    by_artifact_id = {j.artifact_id: j for j in jobs}
+
+    summaries: list[SecFilingSummary] = []
+    for a in artifacts:
+        job = by_artifact_id.get(a.id)
+        summaries.append(
+            SecFilingSummary(
+                artifact_id=a.id,
+                accession_number=a.accession_number,
+                form_type=a.form_type,
+                filing_date=a.filing_date,
+                period_end=a.period_end,
+                artifact_kind=a.artifact_kind.value if isinstance(a.artifact_kind, SecArtifactKind) else str(a.artifact_kind),
+                parser_version=a.parser_version,
+                parse_job_status=job.status.value if job and job.status else None,
+            )
+        )
+
+    return SecFilingListResponse(ticker=t, cik=cik, filings=summaries)
+
+
+@app.get("/api/sec/artifacts/{artifact_id}/download")
+async def download_sec_artifact(artifact_id: int, db: Session = Depends(get_db)):
+    """
+    Download a SEC artifact file (raw filing or parsed text).
+    """
+    artifact = db.query(SecArtifact).filter(SecArtifact.id == artifact_id).first()
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # Security: verify file exists and is within expected storage path
+    if artifact.storage_backend != "local_fs":
+        raise HTTPException(status_code=400, detail="Only local filesystem artifacts are supported")
+
+    file_path = artifact.storage_path
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Determine media type based on file extension
+    ext = os.path.splitext(artifact.file_name)[1].lower()
+    media_type_map = {
+        ".html": "text/html",
+        ".htm": "text/html",
+        ".txt": "text/plain",
+        ".xml": "application/xml",
+        ".xbrl": "application/xml",
+    }
+    media_type = media_type_map.get(ext, "application/octet-stream")
+
+    # Generate download filename: {form_type}_{filing_date}_{accession_number}.{ext}
+    safe_form = artifact.form_type.replace("/", "-")
+    safe_date = artifact.filing_date.strftime("%Y%m%d") if artifact.filing_date else "unknown"
+    safe_acc = artifact.accession_number.replace("/", "-")
+    download_filename = f"{safe_form}_{safe_date}_{safe_acc}{ext}"
+
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        filename=download_filename,
+        headers={"Content-Disposition": f'attachment; filename="{download_filename}"'},
+    )
 
 
 @app.get("/api/watchlists", response_model=list[WatchlistResponse])
@@ -1578,3 +1757,103 @@ async def run_watchlist_refresh_now():
 
     async_result = refresh_watchlist_universe.delay()
     return {"task_id": async_result.id, "status": "queued"}
+
+
+# ---------------------------------------------------------------------------
+# Investment Thesis endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/instruments/{ticker}/thesis", response_model=InvestmentThesisResponse)
+async def get_investment_thesis(ticker: str, db: Session = Depends(get_db)):
+    """Get the investment thesis for a ticker."""
+    ticker_upper = ticker.upper().strip()
+    
+    # Find instrument
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == ticker_upper).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Instrument not found: {ticker}")
+    
+    # Get thesis
+    thesis = db.query(InvestmentThesis).filter(InvestmentThesis.instrument_id == inst.id).first()
+    if not thesis:
+        raise HTTPException(status_code=404, detail=f"Investment thesis not found for {ticker}")
+    
+    return InvestmentThesisResponse(
+        id=thesis.id,
+        ticker=thesis.ticker,
+        title=thesis.title,
+        date=thesis.date,
+        current_price=thesis.current_price,
+        recommendation=thesis.recommendation,
+        executive_summary=thesis.executive_summary,
+        thesis_content=thesis.thesis_content,
+        action_plan=thesis.action_plan,
+        conclusion=thesis.conclusion,
+        created_at=thesis.created_at.isoformat(),
+        updated_at=thesis.updated_at.isoformat(),
+    )
+
+
+@app.post("/api/instruments/{ticker}/thesis", response_model=InvestmentThesisResponse, status_code=201)
+async def create_or_update_investment_thesis(
+    ticker: str, request: CreateInvestmentThesisRequest, db: Session = Depends(get_db)
+):
+    """Create or update the investment thesis for a ticker."""
+    ticker_upper = ticker.upper().strip()
+    
+    # Find or create instrument
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == ticker_upper).first()
+    if not inst:
+        # Create instrument if it doesn't exist
+        inst = Instrument(canonical_symbol=ticker_upper)
+        db.add(inst)
+        db.flush()
+    
+    # Check if thesis exists
+    thesis = db.query(InvestmentThesis).filter(InvestmentThesis.instrument_id == inst.id).first()
+    
+    if thesis:
+        # Update existing
+        thesis.title = request.title
+        thesis.date = request.date
+        thesis.current_price = request.current_price
+        thesis.recommendation = request.recommendation
+        thesis.executive_summary = request.executive_summary
+        thesis.thesis_content = request.thesis_content
+        thesis.action_plan = request.action_plan
+        thesis.conclusion = request.conclusion
+        thesis.updated_at = datetime.utcnow()
+    else:
+        # Create new
+        thesis = InvestmentThesis(
+            instrument_id=inst.id,
+            ticker=ticker_upper,
+            title=request.title,
+            date=request.date,
+            current_price=request.current_price,
+            recommendation=request.recommendation,
+            executive_summary=request.executive_summary,
+            thesis_content=request.thesis_content,
+            action_plan=request.action_plan,
+            conclusion=request.conclusion,
+        )
+        db.add(thesis)
+    
+    db.commit()
+    db.refresh(thesis)
+    
+    return InvestmentThesisResponse(
+        id=thesis.id,
+        ticker=thesis.ticker,
+        title=thesis.title,
+        date=thesis.date,
+        current_price=thesis.current_price,
+        recommendation=thesis.recommendation,
+        executive_summary=thesis.executive_summary,
+        thesis_content=thesis.thesis_content,
+        action_plan=thesis.action_plan,
+        conclusion=thesis.conclusion,
+        created_at=thesis.created_at.isoformat(),
+        updated_at=thesis.updated_at.isoformat(),
+    )

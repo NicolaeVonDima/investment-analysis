@@ -238,3 +238,110 @@ Source: [Spec_FCF_MultiKPI_Chart_Toggles_NoTable.pdf](file://Spec_FCF_MultiKPI_C
 - Move **Valuation / Quality KPIs** onto the same row as **Price** and **FCF** on wide screens.
 - Replace KPI table with a **multi-line KPI chart** and **toggle chips** (like the FCF panel).
 
+## 2025-12-15 — v2.0.0 — SEC 10-K / 10-Q Ingestion and Parse Pipeline (V0)
+
+Source: [SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf](file://SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf)
+
+### Purpose
+- For a specified ticker, discover and download the most recent 10-K and 10-Q filings from SEC EDGAR.
+- Register each filing as an immutable artifact (raw + parsed text) and create parse jobs.
+- Enable later steps such as chunking, embeddings, RAG, and accounting review by providing normalized text artifacts keyed by filing.
+
+### Scope (V0)
+- **Includes**
+  - CIK resolution for a ticker using SEC company_tickers.json.
+  - Filings discovery and deterministic selection:
+    - last **N** 10-K filings (default `SEC_10K_LOOKBACK=2`)
+    - last **M** 10-Q filings (default `SEC_10Q_LOOKBACK=8`)
+    - Optional inclusion of amendments (10-K/A, 10-Q/A) via `SEC_INCLUDE_AMENDMENTS`.
+  - File download of the primary filing document (HTML/iXBRL) to local filesystem under a deterministic folder structure.
+  - Artifact registry updates:
+    - RAW_FILING artifact for each (cik, accession_number).
+    - PARSED_TEXT artifact linked by `parent_artifact_id` after parsing.
+  - Parse job creation and execution:
+    - `SecParseJob` rows for each new/changed RAW_FILING and parser_version.
+    - Worker task that normalizes HTML/iXBRL → plain text and stores it as PARSED_TEXT.
+  - Status reporting via API endpoints for ingestion run summary and per-filing status.
+- **Excludes (V0)**
+  - OCR for scanned images.
+  - Embeddings/vector DB and search.
+  - Accounting agent reasoning and memo generation from SEC text.
+  - PDF export of parsed SEC filings.
+
+### Core Principles
+- **Idempotent reruns**
+  - No duplicate RAW_FILING artifacts for the same (cik, accession_number, artifact_kind).
+  - No duplicate PARSE_FILING jobs for the same (artifact_id, parser_version).
+  - Re-ingestion reuses existing artifacts and jobs when nothing changed.
+- **Deterministic selection**
+  - Eligible forms filtered to {10-K, 10-Q} (+/A when enabled).
+  - Sort by filing_date (desc), accession_number (desc).
+  - Take `N` most recent 10-K and `M` most recent 10-Q; combined list sorted again by filing_date (desc).
+- **Reproducibility**
+  - Raw filing bytes stored on local filesystem with deterministic path: `SEC_STORAGE_BASE_PATH/{cik}/{accession}/primary_document`.
+  - `SecArtifact` rows capture storage_backend, storage_path, file_name, and a content hash of raw bytes.
+  - Parsed text stored as derived artifact with explicit `parser_version` and optional `parse_warnings`.
+- **Operational safety**
+  - Global request rate limiter (default 10 requests/sec) enforced client-side for SEC endpoints.
+  - Required `SEC_EDGAR_USER_AGENT` header with contact information for all SEC calls.
+  - Retry with exponential backoff on transient errors (429/403/5xx/network timeouts), bounded by `SEC_RETRY_MAX_ATTEMPTS`.
+  - Per-ticker ingestion endpoint returns structured summary, including selected filings, created artifacts, and created parse jobs.
+
+### Data Model (logical, V0)
+- **sec_artifacts**
+  - Represents both raw and parsed SEC filing artifacts.
+  - Key fields:
+    - `source = SEC_EDGAR`
+    - `ticker`, `instrument_id`, `cik` (10-digit padded), `accession_number`, `form_type`, `filing_date`, `period_end`
+    - `artifact_kind` = RAW_FILING or PARSED_TEXT
+    - `storage_backend` (V0: `local_fs`), `storage_path`, `file_name`, `content_hash` (raw only)
+    - `parser_version`, `parse_warnings` (parsed only)
+  - Relationships:
+    - Optional `parent_artifact_id` from PARSED_TEXT → RAW_FILING.
+    - Optional `instrument_id` to link filings to platform instruments (via ticker + CIK).
+- **sec_parse_jobs**
+  - Asynchronous parse jobs for filing artifacts.
+  - Key fields:
+    - `job_type` = `PARSE_FILING`
+    - `artifact_id` (references RAW_FILING)
+    - `status` = queued/running/done/failed/deadletter
+    - `attempt_count`, `max_attempts`
+    - `locked_by`, `locked_at` (simple optimistic locking)
+    - `idempotency_key` = `parse:{artifact_id}:{parser_version}`
+    - `last_error` (string, for debugging and deadletters)
+- **instruments**
+  - Extended with optional `cik` (10-digit, indexed) to reuse existing canonical instrument layer and avoid duplicate company identifiers.
+
+### Worker / API Behavior
+- **Ingestion**
+  - API: `POST /api/sec/{ticker}/ingest`
+    - Validates ticker format (A–Z, 0–9, `.`, `-`).
+    - Resolves CIK (reuses `Instrument.cik` when present; otherwise via SEC company_tickers.json).
+    - Fetches company submissions index for CIK.
+    - Applies deterministic selection rules for 10-K/10-Q.
+    - Downloads primary filing documents, registers RAW_FILING artifacts, and creates PARSE_FILING jobs.
+    - Returns `SecIngestResponse` with CIK, selected_count, artifact_ids, parse_job_ids.
+- **Parse jobs**
+  - Worker task: `sec_parse_filing`
+    - Locks job (best-effort) via `locked_by`/`locked_at`.
+    - Reads RAW_FILING from local filesystem.
+    - Normalizes HTML/iXBRL into plain text (strip tags, collapse whitespace).
+    - Writes `.txt` sibling file and persists PARSED_TEXT `SecArtifact`.
+    - Marks job status as done / failed / deadletter based on attempts.
+  - Orchestrator task: `sec_ingest_filings_for_ticker`
+    - Runs ingestion and best-effort enqueues `sec_parse_filing` for newly created jobs.
+
+### Status & Listing
+- **API: `GET /api/sec/{ticker}/filings`**
+  - Lists `SecArtifact` rows for the ticker's CIK (both RAW_FILING and PARSED_TEXT).
+  - Summarizes per-filing state:
+    - `artifact_kind`
+    - `parser_version` (when parsed)
+    - most recent `SecParseJob.status` (if any) for each artifact.
+
+### Non-goals / Future Extensions
+- Section-level parsing, semantic labeling (MD&A, risk factors, etc.).
+- Table and XBRL normalization beyond best-effort plain text.
+- Multi-version parsing (multiple parser versions per filing) beyond V0 single-version support.
+- Scheduling ingestion across watchlists or portfolios (V0 is per-ticker on-demand).
+

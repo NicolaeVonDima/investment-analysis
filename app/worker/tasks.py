@@ -23,6 +23,10 @@ from app.models import (
     FundamentalsSnapshot,
     ProviderRefreshJob,
     ProviderRefreshJobStatus,
+    SecArtifact,
+    SecArtifactKind,
+    SecParseJob,
+    SecParseJobStatus,
 )
 from app.services.data_fetcher import DataFetcher
 from app.services.metric_computer import MetricComputer
@@ -38,6 +42,10 @@ import traceback
 import yfinance as yf
 from sqlalchemy.exc import IntegrityError
 import time
+import uuid
+from typing import Optional
+
+from app.services.sec_ingestion import ingest_sec_filings_for_ticker, load_config
 
 
 def _years_ago_safe(d: date, years: int) -> date:
@@ -48,6 +56,24 @@ def _years_ago_safe(d: date, years: int) -> date:
         return d.replace(year=d.year - years)
     except ValueError:
         return d.replace(year=d.year - years, day=28)
+
+
+def _normalize_html_to_text(raw: str) -> str:
+    """
+    Best-effort HTML/iXBRL to plain text normalization.
+
+    V0: strip tags and collapse whitespace. This is intentionally simple
+    and deterministic; richer parsing/sectioning can be added in later versions.
+    """
+    import re
+
+    # Remove script/style blocks
+    no_scripts = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", " ", raw)
+    # Strip all tags
+    no_tags = re.sub(r"(?s)<[^>]+>", " ", no_scripts)
+    # Collapse whitespace
+    normalized = re.sub(r"\\s+", " ", no_tags).strip()
+    return normalized
 
 
 @celery_app.task(bind=True, name="process_analysis")
@@ -243,6 +269,187 @@ def process_analysis_task(self, request_id: int):
         
         raise
     
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="sec_ingest_filings_for_ticker")
+def sec_ingest_filings_for_ticker_task(self, ticker: str):
+    """
+    Celery task wrapper for SEC 10-K / 10-Q ingestion for a single ticker.
+
+    This task is idempotent at the artifact/job level:
+    - RAW_FILING artifacts are unique per (cik, accession_number, artifact_kind)
+    - PARSE_FILING jobs are unique per (artifact_id, parser_version)
+    """
+    db = SessionLocal()
+    try:
+        result = ingest_sec_filings_for_ticker(db, ticker)
+        # Enqueue parse jobs best-effort
+        from app.worker.tasks import sec_parse_filing_task  # local import to avoid circulars
+
+        for job_id in result.get("parse_job_ids", []):
+            try:
+                sec_parse_filing_task.delay(job_id)
+            except Exception:
+                # Best-effort; job remains queued for future manual processing
+                pass
+        return result
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="sec_parse_filing", max_retries=3)
+def sec_parse_filing_task(self, parse_job_id: int):
+    """
+    Process a single PARSE_FILING job:
+    - lock job
+    - load raw SEC filing from local storage
+    - normalize to plain text
+    - persist PARSED_TEXT artifact
+    - mark job done / failed / deadletter
+    """
+    db = SessionLocal()
+    config = load_config()
+    worker_id = f"sec-parser-{uuid.uuid4()}"
+
+    try:
+        job: Optional[SecParseJob] = db.query(SecParseJob).filter(SecParseJob.id == parse_job_id).first()
+        if not job:
+            return {"status": "not_found", "parse_job_id": parse_job_id}
+
+        if job.status in (SecParseJobStatus.DONE, SecParseJobStatus.DEADLETTER):
+            return {"status": "skipped", "parse_job_id": parse_job_id, "state": job.status.value}
+
+        # Acquire a simple DB-level lock via locked_by/locked_at
+        now = datetime.utcnow()
+        if job.locked_by and job.locked_at:
+            # Another worker is processing; skip
+            return {"status": "locked", "parse_job_id": parse_job_id, "locked_by": job.locked_by}
+
+        job.locked_by = worker_id
+        job.locked_at = now
+        job.status = SecParseJobStatus.RUNNING
+        job.attempt_count = (job.attempt_count or 0) + 1
+        job.last_error = None
+        db.commit()
+
+        artifact: Optional[SecArtifact] = (
+            db.query(SecArtifact).filter(SecArtifact.id == job.artifact_id).first()
+        )
+        if not artifact:
+            job.status = SecParseJobStatus.DEADLETTER
+            job.last_error = "Artifact not found"
+            db.commit()
+            return {"status": "deadletter", "parse_job_id": parse_job_id}
+
+        if artifact.artifact_kind != SecArtifactKind.RAW_FILING:
+            job.status = SecParseJobStatus.DEADLETTER
+            job.last_error = "Artifact is not RAW_FILING"
+            db.commit()
+            return {"status": "deadletter", "parse_job_id": parse_job_id}
+
+        # Idempotent check: if a PARSED_TEXT artifact already exists for this raw+parser_version, skip.
+        existing_parsed = (
+            db.query(SecArtifact)
+            .filter(
+                SecArtifact.parent_artifact_id == artifact.id,
+                SecArtifact.artifact_kind == SecArtifactKind.PARSED_TEXT,
+                SecArtifact.parser_version == config.parser_version,
+            )
+            .first()
+        )
+        if existing_parsed:
+            job.status = SecParseJobStatus.DONE
+            db.commit()
+            return {
+                "status": "completed",
+                "parse_job_id": parse_job_id,
+                "artifact_id": artifact.id,
+                "parsed_artifact_id": existing_parsed.id,
+            }
+
+        # Load raw file from local storage
+        if artifact.storage_backend != "local_fs":
+            raise RuntimeError(f"Unsupported storage_backend for SEC artifact: {artifact.storage_backend}")
+
+        path = artifact.storage_path
+        if not os.path.isabs(path):
+            # Resolve relative to current working directory
+            path = os.path.join(os.getcwd(), path)
+
+        with open(path, "rb") as f:
+            raw_bytes = f.read()
+
+        try:
+            raw_text = raw_bytes.decode("utf-8", errors="ignore")
+        except Exception:
+            raw_text = raw_bytes.decode("latin-1", errors="ignore")
+
+        normalized_text = _normalize_html_to_text(raw_text)
+
+        # Persist parsed text as a sibling .txt file
+        base_dir = os.path.dirname(artifact.storage_path)
+        file_stem = os.path.splitext(os.path.basename(artifact.storage_path))[0]
+        parsed_name = f"{file_stem}.txt"
+        parsed_path = os.path.join(base_dir, parsed_name)
+        os.makedirs(base_dir, exist_ok=True)
+        with open(parsed_path, "w", encoding="utf-8") as f:
+            f.write(normalized_text)
+
+        parsed_artifact = SecArtifact(
+            source=artifact.source,
+            ticker=artifact.ticker,
+            instrument_id=artifact.instrument_id,
+            cik=artifact.cik,
+            accession_number=artifact.accession_number,
+            form_type=artifact.form_type,
+            filing_date=artifact.filing_date,
+            period_end=artifact.period_end,
+            artifact_kind=SecArtifactKind.PARSED_TEXT,
+            parent_artifact_id=artifact.id,
+            storage_backend="local_fs",
+            storage_path=parsed_path,
+            file_name=parsed_name,
+            content_hash=None,
+            parser_version=config.parser_version,
+            parse_warnings=None,
+        )
+        db.add(parsed_artifact)
+        db.commit()
+        db.refresh(parsed_artifact)
+
+        job.status = SecParseJobStatus.DONE
+        db.commit()
+
+        return {
+            "status": "completed",
+            "parse_job_id": parse_job_id,
+            "artifact_id": artifact.id,
+            "parsed_artifact_id": parsed_artifact.id,
+        }
+    except Exception as e:
+        # Update job error state and decide between FAILED vs DEADLETTER
+        job = db.query(SecParseJob).filter(SecParseJob.id == parse_job_id).first()
+        if job:
+            job.last_error = str(e)
+            if job.attempt_count >= (job.max_attempts or 3):
+                job.status = SecParseJobStatus.DEADLETTER
+            else:
+                job.status = SecParseJobStatus.FAILED
+            db.commit()
+
+        # Use Celery retry for transient failures while respecting max_attempts
+        if isinstance(e, RuntimeError) and job and job.status == SecParseJobStatus.FAILED:
+            try:
+                countdown = 2 ** max(0, job.attempt_count - 1)
+                raise self.retry(exc=e, countdown=countdown)
+            except self.MaxRetriesExceededError:
+                # Mark as deadletter if Celery exhausted retries
+                if job:
+                    job.status = SecParseJobStatus.DEADLETTER
+                    db.commit()
+        raise
     finally:
         db.close()
 

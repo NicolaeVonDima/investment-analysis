@@ -392,11 +392,14 @@ class Instrument(Base):
     sector = Column(String(128), nullable=True)
     industry = Column(String(128), nullable=True)
     currency = Column(String(16), nullable=True)
+    # Optional SEC CIK mapping (10-digit zero-padded string when present)
+    cik = Column(String(10), nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     symbol_maps = relationship("ProviderSymbolMap", back_populates="instrument", cascade="all, delete-orphan")
+    investment_thesis = relationship("InvestmentThesis", back_populates="instrument", cascade="all, delete-orphan", uselist=False)
     prices = relationship("PriceEOD", back_populates="instrument", cascade="all, delete-orphan")
     fundamentals = relationship("FundamentalsSnapshot", back_populates="instrument", cascade="all, delete-orphan")
 
@@ -504,6 +507,36 @@ class FundamentalsSnapshot(Base):
     )
 
 
+class InvestmentThesis(Base):
+    """Investment thesis document for a ticker."""
+
+    __tablename__ = "investment_thesis"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker = Column(String(10), nullable=False, index=True)
+
+    # Thesis content
+    title = Column(String(200), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    current_price = Column(Float, nullable=True)
+    recommendation = Column(String(50), nullable=False)  # e.g., "HOLD / CAUTIOUS OPTIMISM"
+    executive_summary = Column(Text, nullable=False)
+    thesis_content = Column(Text, nullable=False)  # Full markdown content
+    action_plan = Column(Text, nullable=True)
+    conclusion = Column(Text, nullable=True)
+
+    # Metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    instrument = relationship("Instrument", back_populates="investment_thesis")
+
+    __table_args__ = (
+        Index("ix_investment_thesis_ticker_date", "ticker", "date"),
+    )
+
+
 class ProviderRefreshJob(Base):
     """
     Tracks provider work for idempotency, retry, and audit.
@@ -578,4 +611,115 @@ class InstrumentDatasetRefresh(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     instrument = relationship("Instrument")
+
+
+# ---------------------------------------------------------------------------
+# SEC EDGAR artifacts and parse jobs (10-K / 10-Q ingestion + parsing)
+# ---------------------------------------------------------------------------
+
+
+class SecArtifactKind(enum.Enum):
+    RAW_FILING = "RAW_FILING"
+    PARSED_TEXT = "PARSED_TEXT"
+
+
+class SecArtifact(Base):
+    """
+    SEC filing artifacts (raw and derived).
+
+    Raw artifacts store the downloaded HTML/iXBRL file.
+    Parsed artifacts store normalized text derived from a raw artifact.
+    """
+
+    __tablename__ = "sec_artifacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Provenance
+    source = Column(String(32), nullable=False, default="SEC_EDGAR", index=True)
+    ticker = Column(String(16), nullable=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="SET NULL"), nullable=True, index=True)
+    cik = Column(String(10), nullable=False, index=True)  # 10-digit padded CIK
+    accession_number = Column(String(32), nullable=False, index=True)
+    form_type = Column(String(16), nullable=False, index=True)  # 10-K, 10-Q, 10-K/A, 10-Q/A
+    filing_date = Column(Date, nullable=False, index=True)
+    period_end = Column(Date, nullable=True, index=True)
+
+    artifact_kind = Column(SQLEnum(SecArtifactKind), nullable=False)
+    parent_artifact_id = Column(Integer, ForeignKey("sec_artifacts.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Storage pointer (V0: local filesystem)
+    storage_backend = Column(String(32), nullable=False, default="local_fs")
+    storage_path = Column(String(1024), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    content_hash = Column(String(128), nullable=True, index=True)  # raw bytes hash; optional for PARSED_TEXT
+
+    # Parsing metadata (for PARSED_TEXT artifacts)
+    parser_version = Column(String(32), nullable=True, index=True)
+    parse_warnings = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+    parent_artifact = relationship("SecArtifact", remote_side=[id])
+
+    __table_args__ = (
+        # Prevent duplicate raw artifacts for the same filing.
+        UniqueConstraint(
+            "cik",
+            "accession_number",
+            "artifact_kind",
+            name="ux_sec_artifacts_filing_kind",
+        ),
+        Index(
+            "ix_sec_artifacts_cik_form_filing_date",
+            "cik",
+            "form_type",
+            "filing_date",
+        ),
+    )
+
+
+class SecParseJobStatus(enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    DEADLETTER = "deadletter"
+
+
+class SecParseJob(Base):
+    """
+    Asynchronous parse job for SEC filings.
+
+    Jobs are idempotent per (artifact_id, parser_version) via idempotency_key.
+    """
+
+    __tablename__ = "sec_parse_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    job_type = Column(String(32), nullable=False, index=True, default="PARSE_FILING")
+    artifact_id = Column(Integer, ForeignKey("sec_artifacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(SQLEnum(SecParseJobStatus), nullable=False, default=SecParseJobStatus.QUEUED, index=True)
+
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+
+    locked_by = Column(String(128), nullable=True, index=True)
+    locked_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
+    last_error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    artifact = relationship("SecArtifact")
+
 

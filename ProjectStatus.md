@@ -139,3 +139,47 @@
 - See Architecture.md v1.7.0 for integration points and usage patterns
 
 
+## 2025-12-15 — Status Update (v2.0.0 SEC EDGAR ingestion + parse V0)
+
+### What changed
+- Implemented **SEC 10-K / 10-Q ingestion and parse pipeline (V0)** per [SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf](file://SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf):
+  - Added `SecEdgarClient` with:
+    - required `SEC_EDGAR_USER_AGENT` header,
+    - process-local rate limiting (default 10 rps),
+    - retries with exponential backoff for transient SEC errors.
+  - Extended `Instrument` with optional `cik` (10-digit padded) and wired CIK resolution into SEC ingestion.
+  - Added `sec_artifacts` table/model for SEC filings:
+    - RAW_FILING artifacts for primary HTML/iXBRL documents downloaded to `SEC_STORAGE_BASE_PATH`.
+    - PARSED_TEXT artifacts for normalized plain-text derived from RAW_FILING.
+  - Added `sec_parse_jobs` table/model for SEC parse jobs with idempotency via `parse:{artifact_id}:{parser_version}`.
+  - Implemented ingestion orchestration (`ingest_sec_filings_for_ticker`):
+    - deterministically selects the last N 10-K and last M 10-Q filings per CIK.
+    - downloads primary documents, registers RAW_FILING artifacts, and creates PARSE_FILING jobs when needed.
+  - Implemented Celery tasks:
+    - `sec_ingest_filings_for_ticker` (idempotent ingestion wrapper).
+    - `sec_parse_filing` (HTML/iXBRL → normalized text, PARSED_TEXT artifact persistence).
+  - Exposed new API endpoints:
+    - `POST /api/sec/{ticker}/ingest` — synchronous per-ticker ingestion.
+    - `GET /api/sec/{ticker}/filings` — lists SEC filing artifacts + parse job status for a ticker/CIK.
+
+### Risks / Mitigations
+- **SEC rate limits / fair access violations**:
+  - Mitigation: process-level rate limiter (`SEC_MAX_REQUEST_RATE`, default 10 rps) + required `SEC_EDGAR_USER_AGENT`.
+  - Retries with backoff on 429/403/5xx and network failures; ingestion is safe but may be slow.
+- **Local filesystem storage for SEC filings**:
+  - Mitigation: deterministic `SEC_STORAGE_BASE_PATH/{cik}/{accession}/{primary_document}` paths and `SecArtifact.storage_path` pointers for reproducibility.
+  - Future: swap `storage_backend` to object storage (e.g., S3) while keeping DB schema stable.
+- **Parser V0 is simple (HTML tag stripping only)**:
+  - Mitigation: store raw bytes + PARSED_TEXT separately with `parser_version` to allow richer parsers in future versions without losing history.
+
+### Tests
+- Added unit tests for SEC ingestion helpers (selection logic, artifact/job idempotency) and ran:
+  - `pytest`
+- Result: **PASS** (all existing + new tests).
+
+### Next tasks
+- Add richer SEC text parsing (section detection, table handling, MD&A / risk factor tagging) behind new `parser_version`s.
+- Add chunking + embeddings pipeline for PARSED_TEXT artifacts and expose search/RAG over SEC filings.
+- Add admin/ops views for SEC ingestion runs and parse job deadletters.
+
+

@@ -243,15 +243,20 @@ const PerformanceTab = ({ data, mockData, loading, priceSeries, overview, ticker
   }, [kpiChartData])
 
   useEffect(() => {
-    // Drop unavailable KPIs from active set.
+    // Drop unavailable KPIs from active set, but avoid infinite update loops by
+    // only updating state when the visible set actually changes.
     setVisibleKpis((prev) => {
-      const next = new Set([...prev].filter((k) => !kpiUnavailable.has(k)))
-      // If all were filtered out, add the first available KPI (if any)
+      const filtered = [...prev].filter((k) => !kpiUnavailable.has(k))
+      let next = new Set(filtered)
       if (next.size === 0) {
         const firstAvailable = kpiMeta.find((m) => !kpiUnavailable.has(m.key))
-        if (firstAvailable) next.add(firstAvailable.key)
+        if (firstAvailable) {
+          next = new Set([firstAvailable.key])
+        }
       }
-      return next
+      const unchanged =
+        next.size === prev.size && [...next].every((k) => prev.has(k))
+      return unchanged ? prev : next
     })
   }, [kpiUnavailable])
 

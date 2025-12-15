@@ -158,3 +158,112 @@ Added **n8n** (self-hosted workflow automation platform) as an optional service 
 - Authentication credentials should be set via environment variables (`N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`)
 - Webhook URLs default to `http://localhost:5678/` (adjust `WEBHOOK_URL` for production deployments)
 
+
+## 2025-12-15 — v2.0.0 — SEC EDGAR 10-K / 10-Q Ingestion and Parse Pipeline (V0)
+
+Source: [SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf](file://SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf)
+
+### Overview
+The SEC ingestion pipeline extends the existing snapshot/analysis architecture with a dedicated **artifact + job layer** for SEC filings:
+- **SecEdgarClient**: rate-limited, header-compliant client for `company_tickers.json`, company submissions, and primary filing downloads from `data.sec.gov` / `sec.gov`.
+- **SEC artifacts** (`sec_artifacts`): immutable records for raw HTML/iXBRL filings and derived normalized text.
+- **SEC parse jobs** (`sec_parse_jobs`): asynchronous jobs that convert RAW_FILING artifacts into PARSED_TEXT artifacts.
+- **API surface**:
+  - `POST /api/sec/{ticker}/ingest` — on-demand ingestion for a ticker.
+  - `GET /api/sec/{ticker}/filings` — list raw + parsed artifacts and parse job status for a ticker/CIK.
+
+### Persistence Layer (SEC)
+- **sec_artifacts**
+  - Represents both raw and parsed SEC filing artifacts.
+  - Core fields:
+    - `source` = `SEC_EDGAR`
+    - `ticker` (optional), `instrument_id` (optional link to `instrument`), `cik` (10-digit padded)
+    - `accession_number`, `form_type`, `filing_date`, `period_end`
+    - `artifact_kind` ∈ {RAW_FILING, PARSED_TEXT}
+    - `storage_backend` (V0: `local_fs`), `storage_path`, `file_name`, `content_hash` (raw only)
+    - `parser_version`, `parse_warnings` (parsed only)
+  - Relationships:
+    - `parent_artifact_id` (nullable self-reference) from PARSED_TEXT → RAW_FILING.
+    - `instrument_id` (nullable FK) to canonical `instrument` row.
+  - Constraints / indexes:
+    - `UNIQUE (cik, accession_number, artifact_kind)` prevents duplicate RAW_FILING and PARSED_TEXT per filing-kind.
+    - Index on `(cik, form_type, filing_date)` for deterministic selection and listing.
+- **sec_parse_jobs**
+  - Tracks asynchronous parsing work separate from analysis/watchlist/provider jobs.
+  - Core fields:
+    - `job_type` = `PARSE_FILING`
+    - `artifact_id` (FK → `sec_artifacts.id` for RAW_FILING)
+    - `status` ∈ {queued, running, done, failed, deadletter}
+    - `attempt_count`, `max_attempts`
+    - `locked_by`, `locked_at` (best-effort concurrency guard)
+    - `idempotency_key = parse:{artifact_id}:{parser_version}` (unique)
+    - `last_error` (text, for diagnostics and deadletters)
+- **instruments.cik**
+  - Adds optional `cik` (10-digit, indexed) on `instrument` to:
+    - avoid duplicating company identity between EDGAR and market data layers;
+    - make it easy to navigate from a ticker in the UI to SEC filings.
+
+### SEC Client / Rate Limiting
+- **SecEdgarClient**
+  - Wraps `requests` with:
+    - process-level rate limiting (`SEC_MAX_REQUEST_RATE`, default 10 rps) to respect SEC guidance.
+    - retries with exponential backoff (`SEC_RETRY_MAX_ATTEMPTS`) on 429/403/5xx and network failures.
+    - mandatory `SEC_EDGAR_USER_AGENT` header (process will fail fast if not set).
+  - Endpoints used:
+    - `https://www.sec.gov/files/company_tickers.json` for ticker → CIK resolution.
+    - `https://data.sec.gov/submissions/CIK##########.json` for company submissions index.
+    - `https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/{primary_document}` for primary filing downloads.
+
+### Ingestion Flow (Web API + Worker)
+- **API ingestion endpoint**
+  - `POST /api/sec/{ticker}/ingest`:
+    - Validates ticker format (A–Z, 0–9, `.`, `-`).
+    - Resolves CIK using `Instrument.cik` when present; otherwise via `SecEdgarClient` + `company_tickers.json`.
+    - Fetches company submissions JSON for CIK.
+    - Delegates filing selection to `select_filings` (deterministic filter + sort + N/M lookback).
+    - For each selected filing:
+      - Downloads primary document bytes.
+      - Calls `register_raw_artifact` to:
+        - store bytes under `SEC_STORAGE_BASE_PATH/{cik}/{accession}/{primary_document}`;
+        - upsert RAW_FILING `SecArtifact` with content hash.
+      - Calls `create_parse_job_if_needed` to idempotently enqueue a `SecParseJob` for the (artifact, parser_version).
+    - Returns a structured `SecIngestResponse` summary.
+- **Worker ingestion wrapper**
+  - Celery task `sec_ingest_filings_for_ticker`:
+    - Wraps `ingest_sec_filings_for_ticker` for background use (e.g., future schedulers or workflows).
+    - Best-effort enqueues `sec_parse_filing` tasks for any newly-created parse jobs.
+- **Worker parse task**
+  - Celery task `sec_parse_filing`:
+    - Loads the `SecParseJob`, acquires a logical lock via `locked_by`/`locked_at`, and transitions to `running`.
+    - Reads the RAW_FILING from `storage_path` (V0: local filesystem).
+    - Normalizes HTML/iXBRL → plain text via `_normalize_html_to_text` (tag-stripping + whitespace collapsing).
+    - Writes a sibling `.txt` file and persists a PARSED_TEXT `SecArtifact` with `parent_artifact_id` and `parser_version`.
+    - Updates job status to `done`; on errors increments `attempt_count` and transitions to `failed` or `deadletter`
+      based on `max_attempts`, with optional Celery retry/backoff for transient errors.
+
+### API for SEC Filings Listing
+- `GET /api/sec/{ticker}/filings`
+  - Resolves/ensures `Instrument` and `cik` for the ticker (reusing `resolve_cik_for_ticker`).
+  - Queries `sec_artifacts` for the CIK, ordered by `(filing_date desc, accession_number desc, artifact_kind)`.
+  - Joins with `sec_parse_jobs` to report latest parse status per artifact.
+  - Returns `SecFilingListResponse` with:
+    - `artifact_id`, `accession_number`, `form_type`, `filing_date`, `period_end`
+    - `artifact_kind`, `parser_version`, and `parse_job_status`.
+
+### Architectural Rationale
+- **Separation of concerns**
+  - SEC artifacts and jobs live alongside, but separate from:
+    - market data (`price_eod`, `fundamentals_snapshot`);
+    - watchlist refresh jobs (`refresh_jobs`, `refresh_job_items`);
+    - provider jobs (`provider_refresh_jobs`).
+  - This avoids overloading existing tables with SEC-specific semantics and keeps idempotency keys explicit.
+- **Reuse of canonical instruments**
+  - `instrument.canonical_symbol` + `instrument.cik` form the bridge between:
+    - market/fundamentals analysis, and
+    - SEC filing ingestion.
+  - UI and downstream analysis can pivot from ticker → instrument → CIK → SEC filings without additional mapping tables.
+- **Append-only and immutable**
+  - Raw filing bytes and parsed text are treated as immutable artifacts.
+  - Re-parsing with a new parser version will create new PARSED_TEXT artifacts and new `sec_parse_jobs` keyed by parser_version
+    (future extension beyond V0).
+

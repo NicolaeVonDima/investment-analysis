@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import PerformanceTab from './PerformanceTab'
 import WatchlistView from './WatchlistView'
+import InvestmentThesisTab from './InvestmentThesisTab'
+import SecFilingsTab from './SecFilingsTab'
 import './MainContent.css'
 
 const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
@@ -23,7 +25,8 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
 
   const tabs = [
     'Overview',
-    'Investment Thesis'
+    'Investment Thesis',
+    'SEC Filings'
   ]
 
   const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
@@ -175,6 +178,13 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
 
   return (
     <div className="main-content">
+      {(liteError || priceSeriesError || overviewError) && (
+        <div style={{ marginBottom: 12, padding: 8, borderRadius: 4, background: '#fef2f2', color: '#b91c1c', fontSize: 13 }}>
+          <strong>Data loading issue:</strong>{' '}
+          {[liteError, priceSeriesError, overviewError].filter(Boolean).join(' • ')}
+        </div>
+      )}
+
       <div className="breadcrumb">
         Browse &gt; {mockData.company.ticker}
       </div>
@@ -282,9 +292,10 @@ const MainContent = ({ ticker, selectedTab: initialTab, selectedNav }) => {
           />
         )}
         {selectedTab === 'Investment Thesis' && (
-          <div className="placeholder-content">
-            <p>Investment Thesis content will be displayed here</p>
-          </div>
+          <InvestmentThesisTab ticker={ticker} />
+        )}
+        {selectedTab === 'SEC Filings' && (
+          <SecFilingsTab ticker={ticker} />
         )}
       </div>
     </div>

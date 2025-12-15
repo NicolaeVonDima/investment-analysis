@@ -15,9 +15,19 @@ FRESH_TTL = timedelta(hours=24)
 
 
 def is_fresh(last_refresh_at: Optional[datetime], now: datetime, ttl: timedelta = FRESH_TTL) -> bool:
+    """
+    Returns True when last_refresh_at is within ttl of now.
+
+    Handles mixed naive/aware datetimes by normalizing last_refresh_at to naive UTC
+    when a tzinfo is present, so we can safely subtract from datetime.utcnow().
+    """
     if not last_refresh_at:
         return False
-    return (now - last_refresh_at) < ttl
+    last = last_refresh_at
+    if last.tzinfo is not None:
+        # Normalize to naive UTC for comparison with datetime.utcnow()
+        last = last.astimezone(tz=None).replace(tzinfo=None)
+    return (now - last) < ttl
 
 
 @dataclass(frozen=True)

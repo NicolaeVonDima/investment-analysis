@@ -23,10 +23,12 @@ services:
       dockerfile: Dockerfile.web
     ports:
       - "8000:8000"
+    env_file:
+      - ./config/alpha_vantage.secrets.env
+      - ./config/sec_edgar.secrets.env
     environment:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
-      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
       ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
@@ -42,10 +44,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    env_file:
+      - ./config/alpha_vantage.secrets.env
+      - ./config/sec_edgar.secrets.env
     environment:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
-      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
       ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
@@ -63,12 +67,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    env_file:
+      - ./config/alpha_vantage.secrets.env
     environment:
       DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
       REDIS_URL: redis://redis:6379/0
       WATCHLIST_REFRESH_HOUR: "2"
       WATCHLIST_REFRESH_MINUTE: "0"
-      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
       ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
     depends_on:
       db:
@@ -110,6 +115,8 @@ services:
     image: n8nio/n8n:latest
     ports:
       - "5678:5678"
+    env_file:
+      - ./config/alpha_vantage.secrets.env
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
@@ -118,6 +125,8 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=http://localhost:5678/
+      - REDIS_URL=redis://redis:6379/0
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       # Optional: Use PostgreSQL for workflow storage (uncomment to enable)
       # - DB_TYPE=postgresdb
       # - DB_POSTGRESDB_HOST=db
@@ -125,8 +134,12 @@ services:
       # - DB_POSTGRESDB_DATABASE=n8n
       # - DB_POSTGRESDB_USER=investment
       # - DB_POSTGRESDB_PASSWORD=investment
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./n8n_workflows:/home/node/.n8n/workflows
     restart: unless-stopped
 
 volumes:

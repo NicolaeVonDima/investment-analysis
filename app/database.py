@@ -138,6 +138,108 @@ def init_db():
                         "ON instrument_dataset_refresh (last_refresh_at)"
                     )
                 )
+                # instruments.cik column (10-digit padded CIK for SEC)
+                conn.execute(
+                    text(
+                        "ALTER TABLE instruments "
+                        "ADD COLUMN IF NOT EXISTS cik VARCHAR(10) NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_instruments_cik "
+                        "ON instruments (cik)"
+                    )
+                )
+            elif dialect == "sqlite":
+                # SQLite supports ADD COLUMN but not IF NOT EXISTS; run best-effort.
+                try:
+                    conn.execute(text("ALTER TABLE provider_symbol_map ADD COLUMN last_verified_at DATETIME NULL"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_provider_symbol_map_last_verified_at ON provider_symbol_map (last_verified_at)")
+                    )
+                except Exception:
+                    pass
+                # instruments.cik column (best-effort for existing SQLite DBs)
+                try:
+                    conn.execute(text("ALTER TABLE instruments ADD COLUMN cik VARCHAR(10) NULL"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_instruments_cik ON instruments (cik)")
+                    )
+                except Exception:
+                    pass
+                # instrument_dataset_refresh for SQLite (create_all will create for fresh DBs; add best-effort for existing)
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE TABLE IF NOT EXISTS instrument_dataset_refresh ("
+                            "instrument_id INTEGER NOT NULL, "
+                            "dataset_type VARCHAR(64) NOT NULL, "
+                            "last_refresh_at DATETIME NULL, "
+                            "last_status VARCHAR(32) NULL, "
+                            "last_error TEXT NULL, "
+                            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                            "PRIMARY KEY (instrument_id, dataset_type)"
+                            ")"
+                        )
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_instrument_dataset_refresh_last_refresh_at "
+                            "ON instrument_dataset_refresh (last_refresh_at)"
+                        )
+                    )
+                except Exception:
+                    pass
+
+                # investment_thesis table
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS investment_thesis ("
+                        "id SERIAL PRIMARY KEY, "
+                        "instrument_id INTEGER NOT NULL REFERENCES instruments(id) ON DELETE CASCADE, "
+                        "ticker VARCHAR(10) NOT NULL, "
+                        "title VARCHAR(200) NOT NULL, "
+                        "date DATE NOT NULL, "
+                        "current_price FLOAT NULL, "
+                        "recommendation VARCHAR(50) NOT NULL, "
+                        "executive_summary TEXT NOT NULL, "
+                        "thesis_content TEXT NOT NULL, "
+                        "action_plan TEXT NULL, "
+                        "conclusion TEXT NULL, "
+                        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
+                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_investment_thesis_instrument_id "
+                        "ON investment_thesis (instrument_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_investment_thesis_ticker "
+                        "ON investment_thesis (ticker)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_investment_thesis_ticker_date "
+                        "ON investment_thesis (ticker, date)"
+                    )
+                )
             elif dialect == "sqlite":
                 # SQLite supports ADD COLUMN but not IF NOT EXISTS; run best-effort.
                 try:
@@ -174,6 +276,47 @@ def init_db():
                             "CREATE INDEX IF NOT EXISTS ix_instrument_dataset_refresh_last_refresh_at "
                             "ON instrument_dataset_refresh (last_refresh_at)"
                         )
+                    )
+                except Exception:
+                    pass
+                # investment_thesis for SQLite
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE TABLE IF NOT EXISTS investment_thesis ("
+                            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                            "instrument_id INTEGER NOT NULL REFERENCES instruments(id) ON DELETE CASCADE, "
+                            "ticker VARCHAR(10) NOT NULL, "
+                            "title VARCHAR(200) NOT NULL, "
+                            "date DATE NOT NULL, "
+                            "current_price REAL NULL, "
+                            "recommendation VARCHAR(50) NOT NULL, "
+                            "executive_summary TEXT NOT NULL, "
+                            "thesis_content TEXT NOT NULL, "
+                            "action_plan TEXT NULL, "
+                            "conclusion TEXT NULL, "
+                            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL"
+                            ")"
+                        )
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_investment_thesis_instrument_id ON investment_thesis (instrument_id)")
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_investment_thesis_ticker ON investment_thesis (ticker)")
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_investment_thesis_ticker_date ON investment_thesis (ticker, date)")
                     )
                 except Exception:
                     pass

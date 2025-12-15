@@ -256,3 +256,67 @@ class FundamentalsSeriesResponse(BaseModel):
     unavailable: List[str] = []
 
 
+# ---------------------------------------------------------------------------
+# Investment Thesis
+# ---------------------------------------------------------------------------
+
+
+class CreateInvestmentThesisRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    date: date
+    current_price: Optional[float] = None
+    recommendation: str = Field(..., min_length=1, max_length=50)
+    executive_summary: str = Field(..., min_length=1)
+    thesis_content: str = Field(..., min_length=1)
+    action_plan: Optional[str] = None
+    conclusion: Optional[str] = None
+
+
+class InvestmentThesisResponse(BaseModel):
+    id: int
+    ticker: str
+    title: str
+    date: date
+    current_price: Optional[float]
+    recommendation: str
+    executive_summary: str
+    thesis_content: str
+    action_plan: Optional[str]
+    conclusion: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+# ---------------------------------------------------------------------------
+# SEC EDGAR ingestion / parse (10-K / 10-Q)
+# ---------------------------------------------------------------------------
+
+
+class SecIngestResponse(BaseModel):
+    ticker: str
+    cik: str
+    selected_count: int
+    artifact_ids: List[int]
+    parse_job_ids: List[int]
+    created_raw_count: int
+    created_parse_job_count: int
+    run_at: str
+
+
+class SecFilingSummary(BaseModel):
+    artifact_id: int
+    accession_number: str
+    form_type: str
+    filing_date: date
+    period_end: Optional[date] = None
+    artifact_kind: str  # RAW_FILING|PARSED_TEXT
+    parser_version: Optional[str] = None
+    parse_job_status: Optional[str] = None  # queued|running|done|failed|deadletter
+
+
+class SecFilingListResponse(BaseModel):
+    ticker: str
+    cik: str
+    filings: List[SecFilingSummary]
+
+

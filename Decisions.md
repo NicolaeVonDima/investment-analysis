@@ -167,3 +167,44 @@ The platform may benefit from workflow automation for:
 - Can optionally use shared PostgreSQL database or file-based storage
 
 
+## 2025-12-15 — ADR-0008 — Introduce dedicated SEC artifacts and parse jobs (sec_artifacts, sec_parse_jobs)
+
+Source: [SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf](file://SEC_Ingestion_Parse_Pipeline_V0_Functional_Spec.pdf)
+
+### Decision
+Add a dedicated SEC artifact + job layer:
+- `sec_artifacts` to represent both raw SEC filings (HTML/iXBRL) and derived normalized text.
+- `sec_parse_jobs` to track asynchronous parsing of SEC filings into PARSED_TEXT artifacts.
+- Extend `instrument` with optional `cik` (10-digit padded) for consistent company identity across market data and SEC filings.
+
+### Context
+We need to ingest and parse SEC 10-K/10-Q filings in a way that is:
+- **idempotent** across reruns and parser versions;
+- **auditable**, with clear separation between raw bytes and parsed text;
+- **reusable** across future workflows (chunking, embeddings, accounting review, RAG).
+
+Existing layers are not a perfect fit:
+- `data_snapshots` are oriented around provider payloads for market/fundamentals analysis, not per-filing SEC artifacts.
+- `refresh_jobs` / `refresh_job_items` are scoped to watchlist-based daily refresh, not per-filing parse work.
+- `provider_refresh_jobs` track provider tasks (e.g., Alpha Vantage) keyed by request, not by SEC filing artifact.
+
+### Alternatives considered
+- **Reuse `data_snapshots` for SEC filings**:
+  - Rejected: conflates market-provider payloads with SEC filings; snapshot uniqueness is per `(ticker, snapshot_date)` rather than per `(cik, accession_number)`.
+- **Extend `refresh_jobs` or `provider_refresh_jobs` with a `job_type=SEC_PARSE`**:
+  - Rejected: would overload semantics and uniqueness keys; SEC parse idempotency is naturally keyed by `(artifact_id, parser_version)`.
+- **Store parsed SEC text only in the filesystem, without DB artifacts**:
+  - Rejected: breaks auditability and makes it harder to trace filings to instruments/tickers and future downstream steps.
+
+### Consequences
+- A clear, append-only SEC artifact history tied to:
+  - specific filings (accession_number, form_type, filing_date);
+  - canonical instruments (via ticker + CIK).
+- Parse jobs become:
+  - idempotent per `(artifact_id, parser_version)` via `idempotency_key=parse:{artifact_id}:{parser_version}`;
+  - safely retriable with attempt counts and deadletter semantics.
+- Future features (e.g., chunking, embeddings, accounting agents) can:
+  - rely on `sec_artifacts` / `sec_parse_jobs` as their source of truth;
+  - version their own derived artifacts against concrete PARSED_TEXT artifacts.
+
+
