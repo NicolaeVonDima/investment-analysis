@@ -320,3 +320,79 @@ class SecFilingListResponse(BaseModel):
     filings: List[SecFilingSummary]
 
 
+# ---------------------------------------------------------------------------
+# SEC fundamentals extraction + alerts
+# ---------------------------------------------------------------------------
+
+
+class SecFundamentalsSnapshotSummary(BaseModel):
+    snapshot_id: int
+    form_type: str
+    filing_date: date
+    period_end: Optional[date] = None
+    parser_version: Optional[str] = None
+    extracted_at: str
+
+
+class SecFundamentalsFactSummary(BaseModel):
+    metric_key: str
+    metric_label: str
+    value: Optional[float] = None
+    unit: Optional[str] = None
+    period: Optional[str] = None
+    context_snippet: Optional[str] = None
+
+
+class SecFundamentalsChangeSummary(BaseModel):
+    metric_key: str
+    metric_label: str
+    prev_value: Optional[float] = None
+    curr_value: Optional[float] = None
+    delta: Optional[float] = None
+    delta_pct: Optional[float] = None
+    unit: Optional[str] = None
+    period: Optional[str] = None
+    severity: Optional[str] = None
+    rule_id: Optional[str] = None
+
+
+class SecFundamentalsAlertSummary(BaseModel):
+    id: int
+    alert_type: str
+    severity: str
+    status: str
+    message: str
+    triggered_at: str
+    resolved_at: Optional[str] = None
+    evidence: Optional[Dict[str, Any]] = None
+
+
+class SecFundamentalsSummaryResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    latest_snapshot: Optional[SecFundamentalsSnapshotSummary] = None
+    top_facts: List[SecFundamentalsFactSummary] = []
+    top_changes: List[SecFundamentalsChangeSummary] = []
+    alerts: List[SecFundamentalsAlertSummary] = []
+
+
+class SecFundamentalsAlertsResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    alerts: List[SecFundamentalsAlertSummary] = []
+
+
+class SecFundamentalsPerspectiveResponse(BaseModel):
+    scope: str  # aggregate|10k|10q
+    latest_snapshot: Optional[SecFundamentalsSnapshotSummary] = None
+    top_facts: List[SecFundamentalsFactSummary] = []
+    top_changes: List[SecFundamentalsChangeSummary] = []
+    alerts: List[SecFundamentalsAlertSummary] = []
+
+
+class SecFundamentalsPerspectivesResponse(BaseModel):
+    ticker: str
+    instrument_id: int
+    aggregate: SecFundamentalsPerspectiveResponse
+    ten_k: SecFundamentalsPerspectiveResponse
+    ten_q: SecFundamentalsPerspectiveResponse

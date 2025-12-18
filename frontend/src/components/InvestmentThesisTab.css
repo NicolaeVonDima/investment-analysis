@@ -342,3 +342,183 @@
   background-color: #0c5d56;
 }
 
+/* Fundamentals Change Section */
+.thesis-fundamentals {
+  margin-top: 32px;
+}
+
+.thesis-fundamentals-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.thesis-fundamentals-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.thesis-fundamentals-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.thesis-fundamentals-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background-color: #f9fafb;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.thesis-fundamentals-tab.active {
+  border-color: #111827;
+  background-color: #111827;
+  color: #ffffff;
+}
+
+.thesis-fundamentals-view {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.thesis-fundamentals-button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #1f2937;
+  background-color: #111827;
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.thesis-fundamentals-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.thesis-fundamentals-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.thesis-fundamentals-status.ok {
+  background-color: #ecfdf5;
+  color: #166534;
+}
+
+.thesis-fundamentals-status.error {
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+.thesis-fundamentals-meta span {
+  padding: 4px 8px;
+  background-color: #f3f4f6;
+  border-radius: 4px;
+}
+
+.thesis-fundamentals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.thesis-fundamentals-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+  background-color: #fafafa;
+}
+
+.thesis-fundamentals-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #111827;
+}
+
+.thesis-fundamentals-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thesis-fundamentals-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.thesis-fundamentals-label {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.thesis-fundamentals-values {
+  display: flex;
+  justify-content: space-between;
+  color: #374151;
+  font-size: 13px;
+}
+
+.thesis-fundamentals-delta {
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.thesis-fundamentals-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.thesis-fundamentals-badge.high {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.thesis-fundamentals-badge.medium {
+  background-color: #ffedd5;
+  color: #9a3412;
+}
+
+.thesis-fundamentals-badge.low {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.thesis-fundamentals-badge.info {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.thesis-fundamentals-loading,
+.thesis-fundamentals-error,
+.thesis-fundamentals-empty {
+  padding: 14px 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.thesis-fundamentals-error {
+  color: #b91c1c;
+}

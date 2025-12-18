@@ -26,6 +26,9 @@ celery_app.conf.update(
     task_soft_time_limit=240,  # 4 minutes
 )
 
+# Ensure task modules are imported so Celery registers them.
+from app.worker import tasks as _tasks  # noqa: F401
+
 if _always_eager:
     # Run tasks inline when no broker is available.
     # Do not propagate task exceptions into the web request path; mimic async behavior.
@@ -35,13 +38,18 @@ if _always_eager:
 # Default: daily at 02:00 UTC.
 _refresh_hour = int(os.getenv("WATCHLIST_REFRESH_HOUR", "2"))
 _refresh_minute = int(os.getenv("WATCHLIST_REFRESH_MINUTE", "0"))
+_sec_refresh_hour = int(os.getenv("WATCHLIST_SEC_REFRESH_HOUR", "3"))
+_sec_refresh_minute = int(os.getenv("WATCHLIST_SEC_REFRESH_MINUTE", "15"))
 celery_app.conf.beat_schedule = {
     "refresh_watchlist_universe_daily": {
         "task": "refresh_watchlist_universe",
         "schedule": crontab(minute=_refresh_minute, hour=_refresh_hour),
-    }
+    },
+    "refresh_sec_watchlist_universe_daily": {
+        "task": "refresh_sec_watchlist_universe",
+        "schedule": crontab(minute=_sec_refresh_minute, hour=_sec_refresh_hour),
+    },
 }
 
 if __name__ == "__main__":
     celery_app.start()
-

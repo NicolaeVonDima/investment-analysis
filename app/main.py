@@ -41,6 +41,11 @@ from app.models import (
     SecArtifact,
     SecArtifactKind,
     SecParseJob,
+    SecParseJobStatus,
+    SecFundamentalsSnapshot,
+    SecFundamentalsFact,
+    SecFundamentalsChange,
+    SecFundamentalsAlert,
 )
 from app.worker.tasks import process_analysis_task
 from app.api_schemas import (
@@ -79,6 +84,14 @@ from app.api_schemas import (
     SecIngestResponse,
     SecFilingListResponse,
     SecFilingSummary,
+    SecFundamentalsSummaryResponse,
+    SecFundamentalsSnapshotSummary,
+    SecFundamentalsFactSummary,
+    SecFundamentalsChangeSummary,
+    SecFundamentalsAlertSummary,
+    SecFundamentalsAlertsResponse,
+    SecFundamentalsPerspectiveResponse,
+    SecFundamentalsPerspectivesResponse,
 )
 from app.services.portfolio_analytics import recompute_portfolio_dashboard
 from app.services.browse_lite import is_fresh, parse_daily_adjusted_latest, parse_time_series_daily_closes
@@ -1452,6 +1465,27 @@ async def sec_ingest_filings(ticker: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
+    # Enqueue any queued parse jobs for this ticker (best-effort).
+    try:
+        from app.worker.tasks import sec_parse_filing_task
+
+        queued_jobs = (
+            db.query(SecParseJob)
+            .join(SecArtifact, SecParseJob.artifact_id == SecArtifact.id)
+            .filter(
+                SecArtifact.ticker == t,
+                SecParseJob.status.in_([SecParseJobStatus.QUEUED, SecParseJobStatus.FAILED]),
+            )
+            .all()
+        )
+        for job in queued_jobs:
+            try:
+                sec_parse_filing_task.delay(job.id)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     return SecIngestResponse(**result)
 
 
@@ -1555,6 +1589,408 @@ async def download_sec_artifact(artifact_id: int, db: Session = Depends(get_db))
         filename=download_filename,
         headers={"Content-Disposition": f'attachment; filename="{download_filename}"'},
     )
+
+
+@app.get("/api/instruments/{ticker}/sec/fundamentals/summary", response_model=SecFundamentalsSummaryResponse)
+async def sec_fundamentals_summary(ticker: str, db: Session = Depends(get_db)):
+    """
+    Latest SEC fundamentals extraction summary + alerts for a ticker.
+    """
+    t = ticker.upper().strip()
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        try:
+            resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+
+    snapshot = (
+        db.query(SecFundamentalsSnapshot)
+        .filter(SecFundamentalsSnapshot.instrument_id == inst.id)
+        .order_by(SecFundamentalsSnapshot.filing_date.desc(), SecFundamentalsSnapshot.extracted_at.desc())
+        .first()
+    )
+
+    if not snapshot:
+        return SecFundamentalsSummaryResponse(
+            ticker=t,
+            instrument_id=inst.id,
+            latest_snapshot=None,
+            top_facts=[],
+            top_changes=[],
+            alerts=[],
+        )
+
+    facts = (
+        db.query(SecFundamentalsFact)
+        .filter(SecFundamentalsFact.snapshot_id == snapshot.id)
+        .order_by(SecFundamentalsFact.metric_key.asc())
+        .all()
+    )
+    fact_summaries = [
+        SecFundamentalsFactSummary(
+            metric_key=f.metric_key,
+            metric_label=f.metric_label,
+            value=f.value_num,
+            unit=f.unit,
+            period=f.period,
+            context_snippet=f.context_snippet,
+        )
+        for f in facts[:8]
+    ]
+
+    changes = (
+        db.query(SecFundamentalsChange)
+        .filter(SecFundamentalsChange.curr_snapshot_id == snapshot.id)
+        .all()
+    )
+    severity_rank = {"high": 3, "medium": 2, "low": 1, "info": 0}
+    changes_sorted = sorted(
+        changes,
+        key=lambda c: (
+            -severity_rank.get((c.severity or "info").lower(), 0),
+            -abs(c.delta_pct or 0),
+        ),
+    )
+    change_summaries = [
+        SecFundamentalsChangeSummary(
+            metric_key=c.metric_key,
+            metric_label=c.metric_label,
+            prev_value=c.prev_value,
+            curr_value=c.curr_value,
+            delta=c.delta,
+            delta_pct=c.delta_pct,
+            unit=c.unit,
+            period=c.period,
+            severity=c.severity,
+            rule_id=c.rule_id,
+        )
+        for c in changes_sorted[:6]
+    ]
+
+    alerts = (
+        db.query(SecFundamentalsAlert)
+        .filter(
+            SecFundamentalsAlert.instrument_id == inst.id,
+            SecFundamentalsAlert.status == "open",
+        )
+        .order_by(SecFundamentalsAlert.triggered_at.desc())
+        .all()
+    )
+    alert_summaries = [
+        SecFundamentalsAlertSummary(
+            id=a.id,
+            alert_type=a.alert_type,
+            severity=a.severity,
+            status=a.status,
+            message=a.message,
+            triggered_at=a.triggered_at.isoformat(),
+            resolved_at=a.resolved_at.isoformat() if a.resolved_at else None,
+            evidence=a.evidence,
+        )
+        for a in alerts[:8]
+    ]
+
+    return SecFundamentalsSummaryResponse(
+        ticker=t,
+        instrument_id=inst.id,
+        latest_snapshot=SecFundamentalsSnapshotSummary(
+            snapshot_id=snapshot.id,
+            form_type=snapshot.form_type,
+            filing_date=snapshot.filing_date,
+            period_end=snapshot.period_end,
+            parser_version=snapshot.parser_version,
+            extracted_at=snapshot.extracted_at.isoformat(),
+        ),
+        top_facts=fact_summaries,
+        top_changes=change_summaries,
+        alerts=alert_summaries,
+    )
+
+
+def _build_sec_fundamentals_perspective(
+    db: Session, inst: Instrument, scope: str, form_types: Optional[list[str]]
+) -> SecFundamentalsPerspectiveResponse:
+    scope_key = scope
+    query = db.query(SecFundamentalsSnapshot).filter(SecFundamentalsSnapshot.instrument_id == inst.id)
+    if form_types:
+        query = query.filter(SecFundamentalsSnapshot.form_type.in_(form_types))
+
+    snapshot = (
+        query.order_by(SecFundamentalsSnapshot.filing_date.desc(), SecFundamentalsSnapshot.extracted_at.desc())
+        .first()
+    )
+
+    if not snapshot:
+        return SecFundamentalsPerspectiveResponse(
+            scope=scope_key,
+            latest_snapshot=None,
+            top_facts=[],
+            top_changes=[],
+            alerts=[],
+        )
+
+    facts = (
+        db.query(SecFundamentalsFact)
+        .filter(SecFundamentalsFact.snapshot_id == snapshot.id)
+        .order_by(SecFundamentalsFact.metric_key.asc())
+        .all()
+    )
+    fact_summaries = [
+        SecFundamentalsFactSummary(
+            metric_key=f.metric_key,
+            metric_label=f.metric_label,
+            value=f.value_num,
+            unit=f.unit,
+            period=f.period,
+            context_snippet=f.context_snippet,
+        )
+        for f in facts[:8]
+    ]
+
+    prior = (
+        query.filter(SecFundamentalsSnapshot.id != snapshot.id)
+        .order_by(SecFundamentalsSnapshot.filing_date.desc(), SecFundamentalsSnapshot.extracted_at.desc())
+        .first()
+    )
+
+    change_summaries: list[SecFundamentalsChangeSummary] = []
+    if prior:
+        prior_facts = (
+            db.query(SecFundamentalsFact)
+            .filter(SecFundamentalsFact.snapshot_id == prior.id)
+            .all()
+        )
+        prior_by_key = {(f.metric_key, f.period): f for f in prior_facts}
+        for f in facts:
+            key = (f.metric_key, f.period)
+            prev = prior_by_key.get(key)
+            if not prev or f.value_num is None or prev.value_num is None:
+                continue
+            delta = f.value_num - prev.value_num
+            delta_pct = delta / prev.value_num if prev.value_num != 0 else None
+            change_summaries.append(
+                SecFundamentalsChangeSummary(
+                    metric_key=f.metric_key,
+                    metric_label=f.metric_label,
+                    prev_value=prev.value_num,
+                    curr_value=f.value_num,
+                    delta=delta,
+                    delta_pct=delta_pct,
+                    unit=f.unit,
+                    period=f.period,
+                    severity=None,
+                    rule_id=None,
+                )
+            )
+        change_summaries.sort(key=lambda c: -abs(c.delta_pct or 0))
+        change_summaries = change_summaries[:6]
+
+    alerts = (
+        db.query(SecFundamentalsAlert)
+        .filter(
+            SecFundamentalsAlert.instrument_id == inst.id,
+            SecFundamentalsAlert.curr_snapshot_id == snapshot.id,
+            SecFundamentalsAlert.status == "open",
+        )
+        .order_by(SecFundamentalsAlert.triggered_at.desc())
+        .all()
+    )
+    alert_summaries = [
+        SecFundamentalsAlertSummary(
+            id=a.id,
+            alert_type=a.alert_type,
+            severity=a.severity,
+            status=a.status,
+            message=a.message,
+            triggered_at=a.triggered_at.isoformat(),
+            resolved_at=a.resolved_at.isoformat() if a.resolved_at else None,
+            evidence=a.evidence,
+        )
+        for a in alerts[:8]
+    ]
+
+    return SecFundamentalsPerspectiveResponse(
+        scope=scope_key,
+        latest_snapshot=SecFundamentalsSnapshotSummary(
+            snapshot_id=snapshot.id,
+            form_type=snapshot.form_type,
+            filing_date=snapshot.filing_date,
+            period_end=snapshot.period_end,
+            parser_version=snapshot.parser_version,
+            extracted_at=snapshot.extracted_at.isoformat(),
+        ),
+        top_facts=fact_summaries,
+        top_changes=change_summaries,
+        alerts=alert_summaries,
+    )
+
+
+@app.get("/api/instruments/{ticker}/sec/fundamentals/perspectives", response_model=SecFundamentalsPerspectivesResponse)
+async def sec_fundamentals_perspectives(ticker: str, db: Session = Depends(get_db)):
+    """
+    Aggregated, 10-K, and 10-Q SEC fundamentals perspectives for a ticker.
+    """
+    t = ticker.upper().strip()
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        try:
+            resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+
+    aggregate = _build_sec_fundamentals_perspective(db, inst, "aggregate", None)
+    ten_k = _build_sec_fundamentals_perspective(db, inst, "10k", ["10-K", "10-K/A"])
+    ten_q = _build_sec_fundamentals_perspective(db, inst, "10q", ["10-Q", "10-Q/A"])
+
+    return SecFundamentalsPerspectivesResponse(
+        ticker=t,
+        instrument_id=inst.id,
+        aggregate=aggregate,
+        ten_k=ten_k,
+        ten_q=ten_q,
+    )
+
+
+@app.get("/api/instruments/{ticker}/sec/fundamentals/alerts", response_model=SecFundamentalsAlertsResponse)
+async def list_sec_fundamentals_alerts(
+    ticker: str,
+    status: Optional[str] = None,
+    limit: int = 25,
+    db: Session = Depends(get_db),
+):
+    """
+    List SEC fundamentals alerts for a ticker.
+    """
+    t = ticker.upper().strip()
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        try:
+            resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+
+    query = db.query(SecFundamentalsAlert).filter(SecFundamentalsAlert.instrument_id == inst.id)
+    if status and status.lower() != "all":
+        query = query.filter(SecFundamentalsAlert.status == status.lower())
+
+    alerts = query.order_by(SecFundamentalsAlert.triggered_at.desc()).limit(min(limit, 100)).all()
+    alert_summaries = [
+        SecFundamentalsAlertSummary(
+            id=a.id,
+            alert_type=a.alert_type,
+            severity=a.severity,
+            status=a.status,
+            message=a.message,
+            triggered_at=a.triggered_at.isoformat(),
+            resolved_at=a.resolved_at.isoformat() if a.resolved_at else None,
+            evidence=a.evidence,
+        )
+        for a in alerts
+    ]
+
+    return SecFundamentalsAlertsResponse(ticker=t, instrument_id=inst.id, alerts=alert_summaries)
+
+
+@app.post("/api/sec/{ticker}/fundamentals/reprocess")
+async def reprocess_sec_fundamentals(ticker: str, db: Session = Depends(get_db)):
+    """
+    Reprocess parsed SEC filings to extract fundamentals for a ticker.
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        try:
+            resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+
+    artifacts = (
+        db.query(SecArtifact)
+        .filter(
+            SecArtifact.instrument_id == inst.id,
+            SecArtifact.artifact_kind == SecArtifactKind.PARSED_TEXT,
+        )
+        .order_by(SecArtifact.filing_date.desc())
+        .limit(10)
+        .all()
+    )
+    if not artifacts:
+        raise HTTPException(status_code=404, detail="No parsed SEC filings found for ticker")
+
+    enqueued = 0
+    for art in artifacts:
+        try:
+            from app.worker.tasks import sec_extract_fundamentals_task
+
+            sec_extract_fundamentals_task.delay(art.id)
+            enqueued += 1
+        except Exception:
+            pass
+
+    return {"ticker": t, "parsed_artifact_count": len(artifacts), "enqueued": enqueued}
+
+
+@app.post("/api/sec/{ticker}/parse/requeue")
+async def requeue_sec_parse_jobs(ticker: str, db: Session = Depends(get_db)):
+    """
+    Requeue SEC parse jobs for a ticker (queued/failed/deadletter).
+    """
+    t = ticker.upper().strip()
+    if not t.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+    inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+    if not inst:
+        try:
+            resolve_cik_for_ticker(db, t)
+            inst = db.query(Instrument).filter(Instrument.canonical_symbol == t).first()
+        except Exception:
+            raise HTTPException(status_code=404, detail="Instrument not found")
+
+    jobs = (
+        db.query(SecParseJob)
+        .join(SecArtifact, SecParseJob.artifact_id == SecArtifact.id)
+        .filter(
+            SecArtifact.ticker == t,
+            SecParseJob.status.in_(
+                [SecParseJobStatus.QUEUED, SecParseJobStatus.FAILED, SecParseJobStatus.DEADLETTER]
+            ),
+        )
+        .all()
+    )
+    if not jobs:
+        return {"ticker": t, "requeued": 0, "status": "no_jobs"}
+
+    requeued = 0
+    for job in jobs:
+        job.status = SecParseJobStatus.QUEUED
+        job.last_error = None
+        job.locked_by = None
+        job.locked_at = None
+        db.add(job)
+    db.commit()
+
+    try:
+        from app.worker.tasks import sec_parse_filing_task
+
+        for job in jobs:
+            try:
+                sec_parse_filing_task.delay(job.id)
+                requeued += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return {"ticker": t, "requeued": requeued, "total_jobs": len(jobs)}
 
 
 @app.get("/api/watchlists", response_model=list[WatchlistResponse])

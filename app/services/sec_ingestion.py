@@ -231,8 +231,9 @@ def register_raw_artifact(
         .first()
     )
     if existing:
-        # If content hash changed, update pointer + hash; else leave as-is
-        if existing.content_hash != content_hash:
+        # If content hash changed, update pointer + hash.
+        # Also refresh storage path if it changed (e.g., base path updated).
+        if existing.content_hash != content_hash or existing.storage_path != storage_path:
             existing.storage_backend = "local_fs"
             existing.storage_path = storage_path
             existing.file_name = primary_document
@@ -389,5 +390,4 @@ def ingest_sec_filings_for_ticker(
         "created_parse_job_count": created_jobs,
         "run_at": datetime.utcnow().isoformat(),
     }
-
 

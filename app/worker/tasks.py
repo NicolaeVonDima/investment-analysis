@@ -46,6 +46,7 @@ import uuid
 from typing import Optional
 
 from app.services.sec_ingestion import ingest_sec_filings_for_ticker, load_config
+from app.services.sec_fundamentals import process_parsed_sec_artifact
 
 
 def _years_ago_safe(d: date, years: int) -> date:
@@ -422,6 +423,11 @@ def sec_parse_filing_task(self, parse_job_id: int):
         job.status = SecParseJobStatus.DONE
         db.commit()
 
+        try:
+            sec_extract_fundamentals_task.delay(parsed_artifact.id)
+        except Exception:
+            pass
+
         return {
             "status": "completed",
             "parse_job_id": parse_job_id,
@@ -453,6 +459,23 @@ def sec_parse_filing_task(self, parse_job_id: int):
     finally:
         db.close()
 
+
+@celery_app.task(bind=True, name="sec_extract_fundamentals", max_retries=2)
+def sec_extract_fundamentals_task(self, parsed_artifact_id: int):
+    """
+    Extract fundamentals from a parsed SEC artifact and compute changes/alerts.
+    """
+    db = SessionLocal()
+    try:
+        result = process_parsed_sec_artifact(db, parsed_artifact_id)
+        return result
+    except Exception as e:
+        try:
+            raise self.retry(exc=e, countdown=2)
+        except self.MaxRetriesExceededError:
+            return {"status": "failed", "artifact_id": parsed_artifact_id, "error": str(e)}
+    finally:
+        db.close()
 
 @celery_app.task(bind=True, name="refresh_watchlist_universe")
 def refresh_watchlist_universe(self):
@@ -631,6 +654,39 @@ def refresh_watchlist_universe(self):
         except Exception:
             pass
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="refresh_sec_watchlist_universe")
+def refresh_sec_watchlist_universe(self):
+    """
+    Daily SEC refresh for the watchlist universe (10-K / 10-Q).
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(WatchlistItem.ticker)
+            .join(Watchlist, WatchlistItem.watchlist_id == Watchlist.id)
+            .filter(Watchlist.is_active.is_(True))
+            .distinct()
+            .all()
+        )
+        tickers = sorted({(r[0] or "").upper().strip() for r in rows if r and r[0]})
+
+        results = {"total": len(tickers), "ingested": 0, "errors": 0}
+        for ticker in tickers:
+            try:
+                result = ingest_sec_filings_for_ticker(db, ticker)
+                results["ingested"] += 1
+                for job_id in result.get("parse_job_ids", []):
+                    try:
+                        sec_parse_filing_task.delay(job_id)
+                    except Exception:
+                        pass
+            except Exception:
+                results["errors"] += 1
+        return results
     finally:
         db.close()
 

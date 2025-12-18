@@ -723,3 +723,129 @@ class SecParseJob(Base):
     artifact = relationship("SecArtifact")
 
 
+# ---------------------------------------------------------------------------
+# SEC fundamentals extraction + alerts
+# ---------------------------------------------------------------------------
+
+
+class SecFundamentalsSnapshot(Base):
+    """Extracted fundamentals snapshot derived from a parsed SEC filing."""
+
+    __tablename__ = "sec_fundamentals_snapshot"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="SET NULL"), nullable=True, index=True)
+    ticker = Column(String(16), nullable=True, index=True)
+    cik = Column(String(10), nullable=True, index=True)
+
+    artifact_id = Column(Integer, ForeignKey("sec_artifacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    form_type = Column(String(16), nullable=False, index=True)
+    filing_date = Column(Date, nullable=False, index=True)
+    period_end = Column(Date, nullable=True, index=True)
+    parser_version = Column(String(32), nullable=True, index=True)
+
+    extracted_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    payload = Column(JSON, nullable=True)
+    source_metadata = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+    artifact = relationship("SecArtifact")
+    facts = relationship("SecFundamentalsFact", back_populates="snapshot", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("artifact_id", name="ux_sec_fundamentals_snapshot_artifact"),
+        Index("ix_sec_fundamentals_snapshot_instrument_period", "instrument_id", "form_type", "period_end"),
+    )
+
+
+class SecFundamentalsFact(Base):
+    """Extracted fundamentals fact with a citation snippet."""
+
+    __tablename__ = "sec_fundamentals_fact"
+
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_id = Column(Integer, ForeignKey("sec_fundamentals_snapshot.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    metric_key = Column(String(64), nullable=False, index=True)
+    metric_label = Column(String(128), nullable=False)
+    value_num = Column(Float, nullable=True)
+    value_raw = Column(String(255), nullable=True)
+    unit = Column(String(32), nullable=True)
+    period = Column(String(32), nullable=True, index=True)
+    context_snippet = Column(Text, nullable=True)
+    confidence = Column(Float, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    snapshot = relationship("SecFundamentalsSnapshot", back_populates="facts")
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "metric_key", "period", name="ux_sec_fundamentals_fact_key"),
+        Index("ix_sec_fundamentals_fact_metric", "metric_key", "snapshot_id"),
+    )
+
+
+class SecFundamentalsChange(Base):
+    """Computed change between two SEC fundamentals snapshots."""
+
+    __tablename__ = "sec_fundamentals_change"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="SET NULL"), nullable=True, index=True)
+    ticker = Column(String(16), nullable=True, index=True)
+
+    metric_key = Column(String(64), nullable=False, index=True)
+    metric_label = Column(String(128), nullable=False)
+    prev_value = Column(Float, nullable=True)
+    curr_value = Column(Float, nullable=True)
+    delta = Column(Float, nullable=True)
+    delta_pct = Column(Float, nullable=True)
+    unit = Column(String(32), nullable=True)
+    period = Column(String(32), nullable=True, index=True)
+
+    prev_snapshot_id = Column(Integer, ForeignKey("sec_fundamentals_snapshot.id", ondelete="SET NULL"), nullable=True, index=True)
+    curr_snapshot_id = Column(Integer, ForeignKey("sec_fundamentals_snapshot.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    detected_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    severity = Column(String(16), nullable=False, default="info")
+    rule_id = Column(String(64), nullable=True)
+    context_snippet = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+
+    __table_args__ = (
+        UniqueConstraint("curr_snapshot_id", "metric_key", "period", name="ux_sec_fundamentals_change_key"),
+        Index("ix_sec_fundamentals_change_metric", "metric_key", "curr_snapshot_id"),
+    )
+
+
+class SecFundamentalsAlert(Base):
+    """Alert generated from fundamentals changes."""
+
+    __tablename__ = "sec_fundamentals_alert"
+
+    id = Column(Integer, primary_key=True, index=True)
+    instrument_id = Column(Integer, ForeignKey("instruments.id", ondelete="SET NULL"), nullable=True, index=True)
+    ticker = Column(String(16), nullable=True, index=True)
+
+    alert_type = Column(String(64), nullable=False, index=True)
+    severity = Column(String(16), nullable=False, default="medium", index=True)
+    status = Column(String(16), nullable=False, default="open", index=True)
+    message = Column(Text, nullable=False)
+    rule_id = Column(String(64), nullable=True)
+
+    change_id = Column(Integer, ForeignKey("sec_fundamentals_change.id", ondelete="SET NULL"), nullable=True, index=True)
+    curr_snapshot_id = Column(Integer, ForeignKey("sec_fundamentals_snapshot.id", ondelete="SET NULL"), nullable=True, index=True)
+    evidence = Column(JSON, nullable=True)
+
+    triggered_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    instrument = relationship("Instrument")
+
