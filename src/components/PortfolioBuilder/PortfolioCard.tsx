@@ -138,21 +138,25 @@ export default function PortfolioCard({
           label="VWCE"
           value={portfolio.allocation.vwce}
           onChange={(value) => handleAllocationChange('vwce', value)}
+          capital={portfolio.capital}
         />
         <AllocationSlider
           label="TVBETETF"
           value={portfolio.allocation.tvbetetf}
           onChange={(value) => handleAllocationChange('tvbetetf', value)}
+          capital={portfolio.capital}
         />
         <AllocationSlider
           label="VGWD"
           value={portfolio.allocation.vgwd}
           onChange={(value) => handleAllocationChange('vgwd', value)}
+          capital={portfolio.capital}
         />
         <AllocationSlider
           label="FIDELIS"
           value={portfolio.allocation.fidelis}
           onChange={(value) => handleAllocationChange('fidelis', value)}
+          capital={portfolio.capital}
         />
         <div className={`text-xs mt-2 ${totalAllocation === 100 ? 'text-green-600' : 'text-red-600'}`}>
           Total: {formatPercentage(totalAllocation / 100)} 
