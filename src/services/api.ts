@@ -114,6 +114,7 @@ function transformPortfolio(portfolio: any): Portfolio {
     capital: portfolio.capital,
     goal: portfolio.goal || undefined,
     riskLabel: portfolio.riskLabel || portfolio.risk_label || undefined,
+    horizon: portfolio.horizon || undefined,
     overperformStrategy: portfolio.overperformStrategy || portfolio.overperform_strategy || undefined,
     allocation: portfolio.allocation,
     rules: portfolio.rules,

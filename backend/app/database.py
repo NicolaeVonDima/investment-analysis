@@ -66,6 +66,12 @@ def init_db():
                         print("Added strategy column to portfolios table")
                     except Exception as e:
                         print(f"Could not add strategy column (may already exist): {e}")
+                if 'horizon' not in columns:
+                    try:
+                        conn.execute(text('ALTER TABLE portfolios ADD COLUMN horizon VARCHAR'))
+                        print("Added horizon column to portfolios table")
+                    except Exception as e:
+                        print(f"Could not add horizon column (may already exist): {e}")
     except Exception as e:
         print(f"Warning: Could not migrate database schema: {e}")
 

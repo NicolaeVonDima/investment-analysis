@@ -54,6 +54,7 @@ function App() {
                 // Preserve loaded values but fill in missing template fields
                 // Use nullish coalescing to handle null, undefined, and empty objects
                 riskLabel: loadedPortfolio.riskLabel ?? template.riskLabel,
+                horizon: loadedPortfolio.horizon ?? template.horizon,
                 overperformStrategy: loadedPortfolio.overperformStrategy ?? template.overperformStrategy,
                 goal: loadedPortfolio.goal ?? template.goal,
                 // Preserve loaded allocation and rules

@@ -14,6 +14,7 @@ class PortfolioBase(BaseModel):
     capital: float
     goal: Optional[str] = None
     riskLabel: Optional[str] = Field(None, alias="risk_label")
+    horizon: Optional[str] = Field(None, alias="horizon")
     overperformStrategy: Optional[Dict[str, Any]] = Field(None, alias="overperform_strategy")
     allocation: Dict[str, float]
     rules: Dict[str, Any]

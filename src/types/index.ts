@@ -11,6 +11,7 @@ export interface Portfolio {
   capital: number;
   goal?: string;
   riskLabel?: string; // e.g., "Risk: Medium"
+  horizon?: string; // e.g., "2026 - 2029"
   overperformStrategy?: {
     title: string;
     content: string[]; // Array of bullet points or lines

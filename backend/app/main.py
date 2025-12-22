@@ -70,6 +70,7 @@ async def save_data(
             
             # Convert camelCase to snake_case for database
             risk_label = getattr(portfolio_data, 'riskLabel', None) or getattr(portfolio_data, 'risk_label', None)
+            horizon = getattr(portfolio_data, 'horizon', None)
             overperform_strategy = getattr(portfolio_data, 'overperformStrategy', None) or getattr(portfolio_data, 'overperform_strategy', None)
             
             if portfolio:
@@ -79,6 +80,7 @@ async def save_data(
                 portfolio.capital = portfolio_data.capital
                 portfolio.goal = portfolio_data.goal
                 portfolio.risk_label = risk_label
+                portfolio.horizon = horizon
                 portfolio.overperform_strategy = overperform_strategy
                 portfolio.allocation = portfolio_data.allocation
                 portfolio.rules = portfolio_data.rules
@@ -92,6 +94,7 @@ async def save_data(
                     capital=portfolio_data.capital,
                     goal=portfolio_data.goal,
                     risk_label=risk_label,
+                    horizon=horizon,
                     overperform_strategy=overperform_strategy,
                     allocation=portfolio_data.allocation,
                     rules=portfolio_data.rules,
@@ -162,6 +165,7 @@ async def load_data(db: Session = Depends(get_db)):
                 capital=p.capital,
                 goal=getattr(p, 'goal', None),
                 riskLabel=getattr(p, 'risk_label', None),
+                horizon=getattr(p, 'horizon', None),
                 overperformStrategy=getattr(p, 'overperform_strategy', None),
                 allocation=p.allocation,
                 rules=p.rules,

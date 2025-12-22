@@ -16,6 +16,7 @@ class PortfolioModel(Base):
     capital = Column(Float, nullable=False)
     goal = Column(String, nullable=True)
     risk_label = Column(String, nullable=True)  # e.g., "Risk: Medium"
+    horizon = Column(String, nullable=True)  # e.g., "2026 - 2029"
     overperform_strategy = Column(JSON, nullable=True)  # {title, content: []}
     allocation = Column(JSON, nullable=False)  # {vwce, tvbetetf, ernx, wqdv, fidelis}
     rules = Column(JSON, nullable=False)  # {tvbetetfConditional}

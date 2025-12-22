@@ -78,18 +78,25 @@ export default function PortfolioCard({
           </div>
         </div>
         
-        {portfolio.riskLabel && (
-          <div className="mt-1 mb-2">
-            <span 
-              className="text-xs font-medium px-2 py-0.5 rounded"
-              style={{ 
-                color: portfolio.color,
-                backgroundColor: `${portfolio.color}15`,
-                border: `1px solid ${portfolio.color}40`
-              }}
-            >
-              {portfolio.riskLabel}
-            </span>
+        {(portfolio.riskLabel || portfolio.horizon) && (
+          <div className="mt-1 mb-2 flex items-center gap-2">
+            {portfolio.riskLabel && (
+              <span 
+                className="text-xs font-medium px-2 py-0.5 rounded"
+                style={{ 
+                  color: portfolio.color,
+                  backgroundColor: `${portfolio.color}15`,
+                  border: `1px solid ${portfolio.color}40`
+                }}
+              >
+                {portfolio.riskLabel}
+              </span>
+            )}
+            {portfolio.horizon && (
+              <span className="text-xs text-gray-600 font-medium">
+                Horizon: {portfolio.horizon}
+              </span>
+            )}
           </div>
         )}
         

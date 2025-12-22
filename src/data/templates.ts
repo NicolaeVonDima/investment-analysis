@@ -9,6 +9,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
     name: 'Aggressive Growth',
     goal: 'Maximum growth potential focusing on Romanian market with global diversification backup.',
     riskLabel: 'Risk: High to Very High',
+    horizon: '2026 - 2029',
     overperformStrategy: {
       title: 'Over-performing rule: Harvest & Rotate',
       content: [
@@ -34,6 +35,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
     name: 'Balanced Allocation',
     goal: 'A balanced approach combining global diversification with Romanian market exposure and income generation.',
     riskLabel: 'Risk: Medium',
+    horizon: '2029 - 2035',
     overperformStrategy: {
       title: 'Over-performing rule',
       content: [
@@ -58,6 +60,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
     name: 'Income Focused',
     goal: 'Prioritize steady income streams from dividends and bonds while maintaining growth potential.',
     riskLabel: 'Risk: Low to Medium',
+    horizon: '2035 - 2100',
     overperformStrategy: {
       title: 'Over-performing rule',
       content: [
