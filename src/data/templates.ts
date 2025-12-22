@@ -80,7 +80,31 @@ export const portfolioTemplates: PortfolioTemplate[] = [
     rules: {
       tvbetetfConditional: false
     }
+  },
+  {
+    name: 'Current Allocation',
+    goal: 'Your actual current portfolio allocation for comparison with other strategies.',
+    riskLabel: 'Risk: Custom',
+    horizon: 'Current',
+    overperformStrategy: {
+      title: 'Current strategy',
+      content: [
+        'This represents your actual portfolio allocation.',
+        'Use this to compare your current strategy with other portfolio approaches.'
+      ]
+    },
+    capital: 675000,
+    allocation: {
+      vwce: 0,
+      tvbetetf: 0,
+      ernx: 0,
+      wqdv: 0,
+      fidelis: 0
+    },
+    rules: {
+      tvbetetfConditional: false
+    }
   }
 ];
 
-export const portfolioColors = ['#DC3545', '#2E86AB', '#28A745']; // Red for Aggressive Growth, Blue for Balanced Allocation, Green for Income Focused
+export const portfolioColors = ['#DC3545', '#2E86AB', '#28A745', '#FFA500']; // Red, Blue, Green, Orange // Red for Aggressive Growth, Blue for Balanced Allocation, Green for Income Focused

@@ -41,14 +41,16 @@ function App() {
     const loadInitialData = async () => {
       try {
         const data = await loadData();
+        // Always ensure all templates are present
+        const loadedPortfolioMap = new Map<string, Portfolio>();
         if (data.portfolios && data.portfolios.length > 0) {
           // Merge loaded portfolios with template data to ensure missing fields are populated
-          const mergedPortfolios = data.portfolios.map((loadedPortfolio: Portfolio) => {
+          data.portfolios.forEach((loadedPortfolio: Portfolio) => {
             // Find matching template by name
             const template = portfolioTemplates.find(t => t.name === loadedPortfolio.name);
             if (template) {
               // Merge template data with loaded data, prioritizing loaded data
-              return {
+              loadedPortfolioMap.set(loadedPortfolio.name, {
                 ...template,
                 ...loadedPortfolio,
                 // Preserve loaded values but fill in missing template fields
@@ -61,32 +63,45 @@ function App() {
                 allocation: loadedPortfolio.allocation,
                 rules: loadedPortfolio.rules,
                 capital: loadedPortfolio.capital
+              });
+            } else {
+              loadedPortfolioMap.set(loadedPortfolio.name, loadedPortfolio);
+            }
+          });
+        }
+        
+        // Sort portfolios to match template order and ensure all templates are present
+        const sortedPortfolios = portfolioTemplates
+          .map((template, index) => {
+            const existingPortfolio = loadedPortfolioMap.get(template.name);
+            if (existingPortfolio) {
+              return {
+                ...existingPortfolio,
+                color: portfolioColors[index] // Update color based on template position
+              };
+            } else {
+              // Create new portfolio from template if it doesn't exist in database
+              return {
+                ...template,
+                id: `portfolio-${index + 1}`,
+                color: portfolioColors[index],
+                capital: data.portfolios?.[0]?.capital || globalInvestment
               };
             }
-            return loadedPortfolio;
           });
-          
-          // Sort portfolios to match template order and update colors based on template position
-          const sortedPortfolios = portfolioTemplates
-            .map((template, index) => {
-              const portfolio = mergedPortfolios.find(p => p.name === template.name);
-              if (portfolio) {
-                return {
-                  ...portfolio,
-                  color: portfolioColors[index] // Update color based on template position
-                };
-              }
-              return null;
-            })
-            .filter((p): p is Portfolio => p !== null);
-          
-          // Add any portfolios not in templates at the end
-          const templateNames = portfolioTemplates.map(t => t.name);
-          const extraPortfolios = mergedPortfolios.filter(p => !templateNames.includes(p.name));
-          
-          setPortfolios([...sortedPortfolios, ...extraPortfolios]);
-          setGlobalInvestment(data.portfolios[0]?.capital || 675000);
-        }
+        
+        // Add any portfolios not in templates at the end
+        const templateNames = portfolioTemplates.map(t => t.name);
+        const extraPortfolios = Array.from(loadedPortfolioMap.values())
+          .filter(p => !templateNames.includes(p.name))
+          .map((p, index) => ({
+            ...p,
+            id: `portfolio-${portfolioTemplates.length + index + 1}`,
+            color: portfolioColors[portfolioTemplates.length + index] || '#808080'
+          }));
+        
+        setPortfolios([...sortedPortfolios, ...extraPortfolios]);
+        setGlobalInvestment(data.portfolios?.[0]?.capital || globalInvestment);
         if (data.scenarios && data.scenarios.length > 0) {
           // Update scenarios state with loaded data
           const loadedScenarios = data.scenarios as Scenario[];
@@ -284,8 +299,8 @@ function App() {
           />
         </div>
 
-        {/* Portfolios in 3 Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Portfolios in 4 Columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           {portfolios.map(portfolio => {
             const evolutionData = simulationResults.find(r => r.portfolioId === portfolio.id)?.years;
             return (
