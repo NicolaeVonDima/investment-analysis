@@ -1,53 +1,27 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-*.egg-info/
-dist/
-build/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-# Environment
-.env
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Local secrets (do not commit)
-config/*.secrets.env
-.agents/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Docker
-.dockerignore
-
-# Output files
-output/
-*.pdf
-*.json
-
-# Logs
-*.log
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# n8n
-.n8n/
-
+.vscode
+.idea

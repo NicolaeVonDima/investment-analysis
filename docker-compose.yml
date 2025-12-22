@@ -1,150 +1,49 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: investment
-      POSTGRES_PASSWORD: investment
-      POSTGRES_DB: investment_analysis
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U investment"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  web:
+  portfolio-app:
     build:
       context: .
-      dockerfile: Dockerfile.web
+      dockerfile: docker/Dockerfile
+    container_name: portfolio-simulator
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app.name=portfolio-simulator"
+      - "app.version=1.0.0"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: portfolio-backend
     ports:
       - "8000:8000"
-    env_file:
-      - ./config/alpha_vantage.secrets.env
-      - ./config/sec_edgar.secrets.env
-    environment:
-      DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
-      REDIS_URL: redis://redis:6379/0
-      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
-      SEC_STORAGE_BASE_PATH: /app/output/sec_filings
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - ./app:/app/app
-      - ./output:/app/output
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    env_file:
-      - ./config/alpha_vantage.secrets.env
-      - ./config/sec_edgar.secrets.env
-    environment:
-      DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
-      REDIS_URL: redis://redis:6379/0
-      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
-      SEC_STORAGE_BASE_PATH: /app/output/sec_filings
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - ./app:/app/app
-      - ./output:/app/output
-      - ./rulesets:/app/rulesets
-      - ./templates:/app/templates
-    command: celery -A app.worker.main worker --loglevel=info
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    env_file:
-      - ./config/alpha_vantage.secrets.env
-    environment:
-      DATABASE_URL: postgresql://investment:investment@db:5432/investment_analysis
-      REDIS_URL: redis://redis:6379/0
-      WATCHLIST_REFRESH_HOUR: "2"
-      WATCHLIST_REFRESH_MINUTE: "0"
-      ALPHAVANTAGE_MOCK: ${ALPHAVANTAGE_MOCK:-0}
-      SEC_STORAGE_BASE_PATH: /app/output/sec_filings
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - ./app:/app/app
-      - ./output:/app/output
-      - ./rulesets:/app/rulesets
-      - ./templates:/app/templates
-    command: celery -A app.worker.main beat --loglevel=info
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      # Browser-facing origin for the API (frontend code appends /api internally).
-      VITE_API_URL: http://localhost:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev -- --host
-
-  n8n:
-    image: n8nio/n8n:latest
-    ports:
-      - "5678:5678"
-    env_file:
-      - ./config/alpha_vantage.secrets.env
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-changeme}
-      - N8N_HOST=${N8N_HOST:-localhost}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - REDIS_URL=redis://redis:6379/0
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      # Optional: Use PostgreSQL for workflow storage (uncomment to enable)
-      # - DB_TYPE=postgresdb
-      # - DB_POSTGRESDB_HOST=db
-      # - DB_POSTGRESDB_PORT=5432
-      # - DB_POSTGRESDB_DATABASE=n8n
-      # - DB_POSTGRESDB_USER=investment
-      # - DB_POSTGRESDB_PASSWORD=investment
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n_workflows:/home/node/.n8n/workflows
     restart: unless-stopped
+    volumes:
+      - portfolio_db_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/portfolio_data.db
+      - CORS_ALLOW_ORIGINS=*
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
-  postgres_data:
-  n8n_data:
+  portfolio_db_data:

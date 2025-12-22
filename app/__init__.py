@@ -1,2 +1,0 @@
-# Investment Analysis Platform
-

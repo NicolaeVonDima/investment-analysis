@@ -1,0 +1,128 @@
+/**
+ * API service for saving and loading portfolio data.
+ */
+
+import axios from 'axios';
+import { Portfolio, Scenario } from '../types';
+
+// Create React App uses process.env.REACT_APP_*
+// In production, nginx proxies /api to backend, so use relative URLs
+// In development, use explicit localhost:8000
+const getApiUrl = () => {
+  // Check for explicit API URL from environment
+  if (typeof process !== 'undefined' && (process.env as any)?.REACT_APP_API_URL) {
+    return (process.env as any).REACT_APP_API_URL;
+  }
+  // In production (nginx proxy), use relative URL
+  // In development, use explicit localhost:8000
+  if (process.env.NODE_ENV === 'production') {
+    return ''; // Relative URL - nginx will proxy to backend
+  }
+  return 'http://localhost:8000';
+};
+
+const API_URL = getApiUrl();
+
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export interface SaveDataRequest {
+  portfolios: Portfolio[];
+  scenarios: Scenario[];
+  default_scenario_id?: string;
+}
+
+export interface LoadDataResponse {
+  portfolios: (Portfolio & { created_at?: string; updated_at?: string })[];
+  scenarios: (Scenario & { id?: string; created_at?: string; updated_at?: string })[];
+  default_scenario_id?: string;
+}
+
+export async function saveData(data: SaveDataRequest): Promise<void> {
+  try {
+    await api.post('/api/data/save', data);
+  } catch (error) {
+    console.error('Error saving data:', error);
+    throw error;
+  }
+}
+
+// Transform backend response to frontend format
+function transformScenario(scenario: any): Scenario {
+  // Handle both camelCase (from frontend) and snake_case (from backend)
+  const assetReturns = scenario.assetReturns || scenario.asset_returns;
+  const trimRules = scenario.trimRules || scenario.trim_rules;
+  const fidelisCap = scenario.fidelisCap !== undefined ? scenario.fidelisCap : (scenario.fidelis_cap !== undefined ? scenario.fidelis_cap : 24000);
+  
+  return {
+    name: scenario.name,
+    inflation: scenario.inflation,
+    assetReturns: assetReturns ? {
+      vwce: assetReturns.vwce || 0.07,
+      tvbetetf: assetReturns.tvbetetf || 0.08,
+      vgwd: assetReturns.vgwd || 0.06,
+      vgwdYield: assetReturns.vgwdYield || 0.03,
+      fidelis: assetReturns.fidelis || 0.06
+    } : {
+      vwce: 0.07,
+      tvbetetf: 0.08,
+      vgwd: 0.06,
+      vgwdYield: 0.03,
+      fidelis: 0.06
+    },
+    trimRules: trimRules ? {
+      vwce: {
+        enabled: trimRules.vwce?.enabled !== undefined ? trimRules.vwce.enabled : false,
+        threshold: trimRules.vwce?.threshold !== undefined ? trimRules.vwce.threshold : 0
+      },
+      tvbetetf: {
+        enabled: trimRules.tvbetetf?.enabled !== undefined ? trimRules.tvbetetf.enabled : false,
+        threshold: trimRules.tvbetetf?.threshold !== undefined ? trimRules.tvbetetf.threshold : 0
+      },
+      vgwd: {
+        enabled: trimRules.vgwd?.enabled !== undefined ? trimRules.vgwd.enabled : false,
+        threshold: trimRules.vgwd?.threshold !== undefined ? trimRules.vgwd.threshold : 0
+      }
+    } : {
+      vwce: { enabled: false, threshold: 0 },
+      tvbetetf: { enabled: false, threshold: 0 },
+      vgwd: { enabled: false, threshold: 0 }
+    },
+    fidelisCap: fidelisCap
+  };
+}
+
+export async function loadData(): Promise<LoadDataResponse> {
+  try {
+    const response = await api.get<any>('/api/data/load');
+    // Transform scenarios to ensure proper format
+    const transformedScenarios = (response.data.scenarios || []).map(transformScenario);
+    
+    // Debug: log first scenario to check format
+    if (transformedScenarios.length > 0) {
+      console.log('Transformed scenario:', transformedScenarios[0]);
+    }
+    
+    return {
+      ...response.data,
+      scenarios: transformedScenarios
+    };
+  } catch (error) {
+    console.error('Error loading data:', error);
+    throw error;
+  }
+}
+
+export async function clearData(): Promise<void> {
+  try {
+    await api.delete('/api/data/clear');
+  } catch (error) {
+    console.error('Error clearing data:', error);
+    throw error;
+  }
+}
+

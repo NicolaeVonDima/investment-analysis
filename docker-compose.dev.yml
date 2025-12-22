@@ -1,0 +1,39 @@
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  portfolio-app-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: portfolio-simulator-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - REACT_APP_API_URL=http://localhost:8000
+    stdin_open: true
+    tty: true
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: portfolio-backend-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - portfolio_db_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/portfolio_data.db
+      - CORS_ALLOW_ORIGINS=*
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  portfolio_db_data:
