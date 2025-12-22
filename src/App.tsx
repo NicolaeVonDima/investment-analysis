@@ -42,7 +42,48 @@ function App() {
       try {
         const data = await loadData();
         if (data.portfolios && data.portfolios.length > 0) {
-          setPortfolios(data.portfolios as Portfolio[]);
+          // Merge loaded portfolios with template data to ensure missing fields are populated
+          const mergedPortfolios = data.portfolios.map((loadedPortfolio: Portfolio) => {
+            // Find matching template by name
+            const template = portfolioTemplates.find(t => t.name === loadedPortfolio.name);
+            if (template) {
+              // Merge template data with loaded data, prioritizing loaded data
+              return {
+                ...template,
+                ...loadedPortfolio,
+                // Preserve loaded values but fill in missing template fields
+                // Use nullish coalescing to handle null, undefined, and empty objects
+                riskLabel: loadedPortfolio.riskLabel ?? template.riskLabel,
+                overperformStrategy: loadedPortfolio.overperformStrategy ?? template.overperformStrategy,
+                goal: loadedPortfolio.goal ?? template.goal,
+                // Preserve loaded allocation and rules
+                allocation: loadedPortfolio.allocation,
+                rules: loadedPortfolio.rules,
+                capital: loadedPortfolio.capital
+              };
+            }
+            return loadedPortfolio;
+          });
+          
+          // Sort portfolios to match template order and update colors based on template position
+          const sortedPortfolios = portfolioTemplates
+            .map((template, index) => {
+              const portfolio = mergedPortfolios.find(p => p.name === template.name);
+              if (portfolio) {
+                return {
+                  ...portfolio,
+                  color: portfolioColors[index] // Update color based on template position
+                };
+              }
+              return null;
+            })
+            .filter((p): p is Portfolio => p !== null);
+          
+          // Add any portfolios not in templates at the end
+          const templateNames = portfolioTemplates.map(t => t.name);
+          const extraPortfolios = mergedPortfolios.filter(p => !templateNames.includes(p.name));
+          
+          setPortfolios([...sortedPortfolios, ...extraPortfolios]);
           setGlobalInvestment(data.portfolios[0]?.capital || 675000);
         }
         if (data.scenarios && data.scenarios.length > 0) {

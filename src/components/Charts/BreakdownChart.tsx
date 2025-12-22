@@ -16,12 +16,18 @@ export default function BreakdownChart({ result, showReal }: BreakdownChartProps
       const inflationFactor = Math.pow(1.03, index + 1); // Using 3% as default inflation
       return {
         year: year.year,
-        'VGWD Dividends': showReal 
-          ? year.income.vgwdDividends / inflationFactor
-          : year.income.vgwdDividends,
-        'VGWD Trim': showReal
-          ? (year.income.vgwdTrim || 0) / inflationFactor
-          : (year.income.vgwdTrim || 0),
+        'ERNX Yield': showReal 
+          ? year.income.ernxYield / inflationFactor
+          : year.income.ernxYield,
+        'ERNX Trim': showReal
+          ? (year.income.ernxTrim || 0) / inflationFactor
+          : (year.income.ernxTrim || 0),
+        'WQDV Yield': showReal 
+          ? year.income.wqdvYield / inflationFactor
+          : year.income.wqdvYield,
+        'WQDV Trim': showReal
+          ? (year.income.wqdvTrim || 0) / inflationFactor
+          : (year.income.wqdvTrim || 0),
         'FIDELIS Interest': showReal
           ? year.income.fidelisInterest / inflationFactor
           : year.income.fidelisInterest,
@@ -66,8 +72,10 @@ export default function BreakdownChart({ result, showReal }: BreakdownChartProps
             labelFormatter={(label) => `Year: ${label}`}
           />
           <Legend />
-          <Area type="monotone" dataKey="VGWD Dividends" stackId="1" stroke="#28A745" fill="#28A745" />
-          <Area type="monotone" dataKey="VGWD Trim" stackId="1" stroke="#20C997" fill="#20C997" />
+          <Area type="monotone" dataKey="ERNX Yield" stackId="1" stroke="#28A745" fill="#28A745" />
+          <Area type="monotone" dataKey="ERNX Trim" stackId="1" stroke="#20C997" fill="#20C997" />
+          <Area type="monotone" dataKey="WQDV Yield" stackId="1" stroke="#9B59B6" fill="#9B59B6" />
+          <Area type="monotone" dataKey="WQDV Trim" stackId="1" stroke="#8E44AD" fill="#8E44AD" />
           <Area type="monotone" dataKey="FIDELIS Interest" stackId="1" stroke="#DC3545" fill="#DC3545" />
           <Area type="monotone" dataKey="VWCE Trim" stackId="1" stroke="#2E86AB" fill="#2E86AB" />
           <Area type="monotone" dataKey="TVBETETF Income" stackId="1" stroke="#F4A261" fill="#F4A261" />

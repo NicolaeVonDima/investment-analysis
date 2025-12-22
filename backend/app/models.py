@@ -17,7 +17,7 @@ class PortfolioModel(Base):
     goal = Column(String, nullable=True)
     risk_label = Column(String, nullable=True)  # e.g., "Risk: Medium"
     overperform_strategy = Column(JSON, nullable=True)  # {title, content: []}
-    allocation = Column(JSON, nullable=False)  # {vwce, tvbetetf, vgwd, fidelis}
+    allocation = Column(JSON, nullable=False)  # {vwce, tvbetetf, ernx, wqdv, fidelis}
     rules = Column(JSON, nullable=False)  # {tvbetetfConditional}
     strategy = Column(JSON, nullable=True)  # {overperformanceStrategy, overperformanceThreshold}
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -30,7 +30,7 @@ class ScenarioModel(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True, index=True)
     inflation = Column(Float, nullable=False)
-    asset_returns = Column(JSON, nullable=False)  # {vwce, tvbetetf, vgwd, vgwdYield, fidelis}
+    asset_returns = Column(JSON, nullable=False)  # {vwce, tvbetetf, ernx, ernxYield, wqdv, wqdvYield, fidelis}
     trim_rules = Column(JSON, nullable=False)  # {vwce: {enabled, threshold}, ...}
     fidelis_cap = Column(Float, nullable=False)
     is_default = Column(Boolean, default=False, nullable=False)

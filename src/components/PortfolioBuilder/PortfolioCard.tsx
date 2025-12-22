@@ -25,7 +25,8 @@ export default function PortfolioCard({
   const totalAllocation = 
     portfolio.allocation.vwce +
     portfolio.allocation.tvbetetf +
-    portfolio.allocation.vgwd +
+    portfolio.allocation.ernx +
+    portfolio.allocation.wqdv +
     portfolio.allocation.fidelis;
 
   const handleNameChange = (newName: string) => {
@@ -120,10 +121,17 @@ export default function PortfolioCard({
             />
             <div 
               style={{ 
-                width: `${portfolio.allocation.vgwd}%`,
+                width: `${portfolio.allocation.ernx}%`,
                 backgroundColor: '#28A745'
               }}
-              title="VGWD"
+              title="ERNX"
+            />
+            <div 
+              style={{ 
+                width: `${portfolio.allocation.wqdv}%`,
+                backgroundColor: '#9B59B6'
+              }}
+              title="WQDV"
             />
             <div 
               style={{ 
@@ -147,9 +155,15 @@ export default function PortfolioCard({
           capital={portfolio.capital}
         />
         <AllocationSlider
-          label="VGWD"
-          value={portfolio.allocation.vgwd}
-          onChange={(value) => handleAllocationChange('vgwd', value)}
+          label="ERNX"
+          value={portfolio.allocation.ernx}
+          onChange={(value) => handleAllocationChange('ernx', value)}
+          capital={portfolio.capital}
+        />
+        <AllocationSlider
+          label="WQDV"
+          value={portfolio.allocation.wqdv}
+          onChange={(value) => handleAllocationChange('wqdv', value)}
           capital={portfolio.capital}
         />
         <AllocationSlider

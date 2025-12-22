@@ -18,7 +18,8 @@ export interface Portfolio {
   allocation: {
     vwce: number;      // 0-100
     tvbetetf: number;  // 0-100
-    vgwd: number;      // 0-100
+    ernx: number;      // 0-100 (ultrashort bond ETF)
+    wqdv: number;      // 0-100
     fidelis: number;   // 0-100
   };
   rules: {
@@ -36,8 +37,10 @@ export interface Scenario {
   assetReturns: {
     vwce: number;      // Annual return rate (e.g., 0.07 = 7%)
     tvbetetf: number;  // Annual return rate
-    vgwd: number;      // Annual return rate
-    vgwdYield: number; // Dividend yield for VGWD
+    ernx: number;      // Annual return rate
+    ernxYield: number; // Yield for ERNX (ultrashort bond ETF)
+    wqdv: number;      // Annual return rate
+    wqdvYield: number; // Yield for WQDV
     fidelis: number;   // Interest rate for FIDELIS
   };
   trimRules: {
@@ -49,7 +52,11 @@ export interface Scenario {
       enabled: boolean;
       threshold: number;
     };
-    vgwd: {
+    ernx: {
+      enabled: boolean;
+      threshold: number;
+    };
+    wqdv: {
       enabled: boolean;
       threshold: number;
     };
@@ -58,8 +65,8 @@ export interface Scenario {
   // Legacy fields for backward compatibility (deprecated)
   vwceGrowth?: number;
   tvbetetfGrowth?: number;
-  vgwdGrowth?: number;
-  vgwdYield?: number;
+  ernxGrowth?: number;
+  ernxYield?: number;
   fidelisRate?: number;
 }
 
@@ -70,12 +77,15 @@ export interface YearResult {
   assets: {
     vwce: number;
     tvbetetf: number;
-    vgwd: number;
+    ernx: number;
+    wqdv: number;
     fidelis: number;
   };
   income: {
-    vgwdDividends: number;
-    vgwdTrim?: number;
+    ernxYield: number;
+    ernxTrim?: number;
+    wqdvYield: number;
+    wqdvTrim?: number;
     fidelisInterest: number;
     vwceTrim: number;
     tvbetetfToIncome: number;

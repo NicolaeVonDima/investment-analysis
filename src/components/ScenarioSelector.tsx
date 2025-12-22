@@ -185,12 +185,20 @@ export default function ScenarioSelector({
                 <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.tvbetetf)}</span>
               </div>
               <div>
-                <span className="text-gray-600">VGWD Return:</span>
-                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.vgwd)}</span>
+                <span className="text-gray-600">ERNX Return:</span>
+                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.ernx)}</span>
               </div>
               <div>
-                <span className="text-gray-600">VGWD Yield:</span>
-                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.vgwdYield)}</span>
+                <span className="text-gray-600">ERNX Yield:</span>
+                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.ernxYield)}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">WQDV Return:</span>
+                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.wqdv)}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">WQDV Yield:</span>
+                <span className="font-medium ml-2">{formatPercentage(selectedScenario.assetReturns.wqdvYield)}</span>
               </div>
               <div>
                 <span className="text-gray-600">FIDELIS Rate:</span>

@@ -77,7 +77,7 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
     <div className="space-y-2">
       <h4 className="text-xs font-semibold text-gray-700 mb-2">Asset Returns & Trim Rules</h4>
       
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {/* VWCE */}
         <div className="border rounded p-2 bg-gray-50">
           <div className="flex justify-between items-center mb-1">
@@ -186,21 +186,21 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
           )}
         </div>
 
-        {/* VGWD */}
+        {/* ERNX */}
         <div className="border rounded p-2 bg-gray-50">
           <div className="flex justify-between items-center mb-1">
-            <label className="text-xs font-medium text-gray-700">VGWD</label>
+            <label className="text-xs font-medium text-gray-700">ERNX</label>
             <span className="text-xs text-gray-500">
-              Excess: {formatPercentage(calculateExcessReturn(scenario.assetReturns.vgwd))}
+              Excess: {formatPercentage(calculateExcessReturn(scenario.assetReturns.ernx))}
             </span>
           </div>
           <div className="mb-1">
             <label className="block text-xs text-gray-600 mb-0.5">Return (%)</label>
             <input
               type="number"
-              value={getDisplayValue('vgwd')}
-              onChange={(e) => handleReturnChange('vgwd', e.target.value)}
-              onBlur={() => handleReturnBlur('vgwd')}
+              value={getDisplayValue('ernx')}
+              onChange={(e) => handleReturnChange('ernx', e.target.value)}
+              onBlur={() => handleReturnBlur('ernx')}
               className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               step="0.1"
               min="0"
@@ -211,9 +211,9 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
             <label className="block text-xs text-gray-600 mb-0.5">Yield (%)</label>
             <input
               type="number"
-              value={getDisplayValue('vgwdYield')}
-              onChange={(e) => handleReturnChange('vgwdYield', e.target.value)}
-              onBlur={() => handleReturnBlur('vgwdYield')}
+              value={getDisplayValue('ernxYield')}
+              onChange={(e) => handleReturnChange('ernxYield', e.target.value)}
+              onBlur={() => handleReturnBlur('ernxYield')}
               className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               step="0.1"
               min="0"
@@ -223,18 +223,18 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
           <div className="flex items-center gap-1.5 mb-1">
             <input
               type="checkbox"
-              checked={scenario.trimRules.vgwd.enabled}
-              onChange={(e) => handleTrimRuleChange('vgwd', 'enabled', e.target.checked)}
+              checked={scenario.trimRules.ernx.enabled}
+              onChange={(e) => handleTrimRuleChange('ernx', 'enabled', e.target.checked)}
               className="w-3 h-3 text-primary border-gray-300 rounded focus:ring-primary"
             />
             <span className="text-xs text-gray-600">Trim</span>
           </div>
-          {scenario.trimRules.vgwd.enabled && (
+          {scenario.trimRules.ernx.enabled && (
             <div>
               <div className="flex justify-between items-center mb-0.5">
                 <span className="text-xs text-gray-600">Threshold</span>
                 <span className="text-xs font-medium">
-                  {formatPercentage(scenario.trimRules.vgwd.threshold)}
+                  {formatPercentage(scenario.trimRules.ernx.threshold)}
                 </span>
               </div>
               <input
@@ -242,12 +242,79 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
                 min="0"
                 max="10"
                 step="0.1"
-                value={scenario.trimRules.vgwd.threshold * 100}
-                onChange={(e) => handleTrimRuleChange('vgwd', 'threshold', parseFloat(e.target.value) / 100)}
+                value={scenario.trimRules.ernx.threshold * 100}
+                onChange={(e) => handleTrimRuleChange('ernx', 'threshold', parseFloat(e.target.value) / 100)}
                 className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
               <p className="text-xs text-gray-500 mt-0.5">
-                Trim: {formatPercentage(calculateTrimAmount(scenario.assetReturns.vgwd, scenario.trimRules.vgwd.threshold))}
+                Trim: {formatPercentage(calculateTrimAmount(scenario.assetReturns.ernx, scenario.trimRules.ernx.threshold))}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* WQDV */}
+        <div className="border rounded p-2 bg-gray-50">
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-xs font-medium text-gray-700">WQDV</label>
+            <span className="text-xs text-gray-500">
+              Excess: {formatPercentage(calculateExcessReturn(scenario.assetReturns.wqdv))}
+            </span>
+          </div>
+          <div className="mb-1">
+            <label className="block text-xs text-gray-600 mb-0.5">Return (%)</label>
+            <input
+              type="number"
+              value={getDisplayValue('wqdv')}
+              onChange={(e) => handleReturnChange('wqdv', e.target.value)}
+              onBlur={() => handleReturnBlur('wqdv')}
+              className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              step="0.1"
+              min="0"
+              max="30"
+            />
+          </div>
+          <div className="mb-1">
+            <label className="block text-xs text-gray-600 mb-0.5">Yield (%)</label>
+            <input
+              type="number"
+              value={getDisplayValue('wqdvYield')}
+              onChange={(e) => handleReturnChange('wqdvYield', e.target.value)}
+              onBlur={() => handleReturnBlur('wqdvYield')}
+              className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              step="0.1"
+              min="0"
+              max="10"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 mb-1">
+            <input
+              type="checkbox"
+              checked={scenario.trimRules.wqdv.enabled}
+              onChange={(e) => handleTrimRuleChange('wqdv', 'enabled', e.target.checked)}
+              className="w-3 h-3 text-primary border-gray-300 rounded focus:ring-primary"
+            />
+            <span className="text-xs text-gray-600">Trim</span>
+          </div>
+          {scenario.trimRules.wqdv.enabled && (
+            <div>
+              <div className="flex justify-between items-center mb-0.5">
+                <span className="text-xs text-gray-600">Threshold</span>
+                <span className="text-xs font-medium">
+                  {formatPercentage(scenario.trimRules.wqdv.threshold)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="0.1"
+                value={scenario.trimRules.wqdv.threshold * 100}
+                onChange={(e) => handleTrimRuleChange('wqdv', 'threshold', parseFloat(e.target.value) / 100)}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <p className="text-xs text-gray-500 mt-0.5">
+                Trim: {formatPercentage(calculateTrimAmount(scenario.assetReturns.wqdv, scenario.trimRules.wqdv.threshold))}
               </p>
             </div>
           )}

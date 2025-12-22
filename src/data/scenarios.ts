@@ -7,8 +7,10 @@ export const scenarios: Scenario[] = [
     assetReturns: {
       vwce: 0.04,
       tvbetetf: 0.03,
-      vgwd: 0.02,
-      vgwdYield: 0.025,
+      ernx: 0.02,
+      ernxYield: 0.025,
+      wqdv: 0.025,
+      wqdvYield: 0.03,
       fidelis: 0.05
     },
     trimRules: {
@@ -20,7 +22,11 @@ export const scenarios: Scenario[] = [
         enabled: false,
         threshold: 0.0
       },
-      vgwd: {
+      ernx: {
+        enabled: false,
+        threshold: 0.0
+      },
+      wqdv: {
         enabled: false,
         threshold: 0.0
       }
@@ -33,8 +39,10 @@ export const scenarios: Scenario[] = [
     assetReturns: {
       vwce: 0.07,
       tvbetetf: 0.08,
-      vgwd: 0.05,
-      vgwdYield: 0.03,
+      ernx: 0.05,
+      ernxYield: 0.03,
+      wqdv: 0.06,
+      wqdvYield: 0.04,
       fidelis: 0.06
     },
     trimRules: {
@@ -46,7 +54,11 @@ export const scenarios: Scenario[] = [
         enabled: true,
         threshold: 0.0  // Changed from 0.06 to 0.0 to generate 5% trim (8% - 3% - 0%)
       },
-      vgwd: {
+      ernx: {
+        enabled: false,
+        threshold: 0.0
+      },
+      wqdv: {
         enabled: false,
         threshold: 0.0
       }
@@ -59,8 +71,10 @@ export const scenarios: Scenario[] = [
     assetReturns: {
       vwce: 0.10,
       tvbetetf: 0.12,
-      vgwd: 0.07,
-      vgwdYield: 0.035,
+      ernx: 0.07,
+      ernxYield: 0.035,
+      wqdv: 0.08,
+      wqdvYield: 0.045,
       fidelis: 0.065
     },
     trimRules: {
@@ -72,7 +86,11 @@ export const scenarios: Scenario[] = [
         enabled: true,
         threshold: 0.06
       },
-      vgwd: {
+      ernx: {
+        enabled: false,
+        threshold: 0.0
+      },
+      wqdv: {
         enabled: false,
         threshold: 0.0
       }

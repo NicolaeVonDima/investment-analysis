@@ -64,14 +64,18 @@ function transformScenario(scenario: any): Scenario {
     assetReturns: assetReturns ? {
       vwce: assetReturns.vwce || 0.07,
       tvbetetf: assetReturns.tvbetetf || 0.08,
-      vgwd: assetReturns.vgwd || 0.06,
-      vgwdYield: assetReturns.vgwdYield || 0.03,
+      ernx: assetReturns.ernx || 0.06,
+      ernxYield: assetReturns.ernxYield || 0.03,
+      wqdv: assetReturns.wqdv || 0.06,
+      wqdvYield: assetReturns.wqdvYield || 0.04,
       fidelis: assetReturns.fidelis || 0.06
     } : {
       vwce: 0.07,
       tvbetetf: 0.08,
-      vgwd: 0.06,
-      vgwdYield: 0.03,
+      ernx: 0.06,
+      ernxYield: 0.03,
+      wqdv: 0.06,
+      wqdvYield: 0.04,
       fidelis: 0.06
     },
     trimRules: trimRules ? {
@@ -83,14 +87,19 @@ function transformScenario(scenario: any): Scenario {
         enabled: trimRules.tvbetetf?.enabled !== undefined ? trimRules.tvbetetf.enabled : false,
         threshold: trimRules.tvbetetf?.threshold !== undefined ? trimRules.tvbetetf.threshold : 0
       },
-      vgwd: {
-        enabled: trimRules.vgwd?.enabled !== undefined ? trimRules.vgwd.enabled : false,
-        threshold: trimRules.vgwd?.threshold !== undefined ? trimRules.vgwd.threshold : 0
+      ernx: {
+        enabled: trimRules.ernx?.enabled !== undefined ? trimRules.ernx.enabled : false,
+        threshold: trimRules.ernx?.threshold !== undefined ? trimRules.ernx.threshold : 0
+      },
+      wqdv: {
+        enabled: trimRules.wqdv?.enabled !== undefined ? trimRules.wqdv.enabled : false,
+        threshold: trimRules.wqdv?.threshold !== undefined ? trimRules.wqdv.threshold : 0
       }
     } : {
       vwce: { enabled: false, threshold: 0 },
       tvbetetf: { enabled: false, threshold: 0 },
-      vgwd: { enabled: false, threshold: 0 }
+      ernx: { enabled: false, threshold: 0 },
+      wqdv: { enabled: false, threshold: 0 }
     },
     fidelisCap: fidelisCap
   };

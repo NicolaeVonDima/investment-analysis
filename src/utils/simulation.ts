@@ -13,7 +13,8 @@ export function simulatePortfolio(
   // Initialize assets based on allocation
   let vwce = (portfolio.capital * portfolio.allocation.vwce) / 100;
   let tvbetetf = (portfolio.capital * portfolio.allocation.tvbetetf) / 100;
-  let vgwd = (portfolio.capital * portfolio.allocation.vgwd) / 100;
+  let ernx = (portfolio.capital * portfolio.allocation.ernx) / 100;
+  let wqdv = (portfolio.capital * portfolio.allocation.wqdv) / 100;
   let fidelis = (portfolio.capital * portfolio.allocation.fidelis) / 100;
   
   for (let year = 0; year < years; year++) {
@@ -22,12 +23,15 @@ export function simulatePortfolio(
     // Use scenario-specific asset returns
     const vwceReturn = scenario.assetReturns.vwce;
     const tvbetetfReturn = scenario.assetReturns.tvbetetf;
-    const vgwdReturn = scenario.assetReturns.vgwd;
-    const vgwdYield = scenario.assetReturns.vgwdYield;
+    const ernxReturn = scenario.assetReturns.ernx;
+    const ernxYield = scenario.assetReturns.ernxYield;
+    const wqdvReturn = scenario.assetReturns.wqdv;
+    const wqdvYield = scenario.assetReturns.wqdvYield;
     const fidelisRate = scenario.assetReturns.fidelis;
     
     // 1. Calculate income BEFORE applying trims
-    const vgwdDividends = vgwd * vgwdYield;
+    const ernxYieldIncome = ernx * ernxYield;
+    const wqdvYieldIncome = wqdv * wqdvYield;
     const fidelisInterest = fidelis * fidelisRate;
     
     // 2. Calculate trim amounts based on excess return over inflation
@@ -60,11 +64,18 @@ export function simulatePortfolio(
       }
     }
     
-    let vgwdTrim = 0;
-    if (scenario.trimRules.vgwd.enabled) {
-      const excessReturn = Math.max(0, vgwdReturn - scenario.inflation);
-      const trimAmount = Math.max(0, excessReturn - scenario.trimRules.vgwd.threshold);
-      vgwdTrim = vgwd * trimAmount;
+    let ernxTrim = 0;
+    if (scenario.trimRules.ernx.enabled) {
+      const excessReturn = Math.max(0, ernxReturn - scenario.inflation);
+      const trimAmount = Math.max(0, excessReturn - scenario.trimRules.ernx.threshold);
+      ernxTrim = ernx * trimAmount;
+    }
+    
+    let wqdvTrim = 0;
+    if (scenario.trimRules.wqdv.enabled) {
+      const excessReturn = Math.max(0, wqdvReturn - scenario.inflation);
+      const trimAmount = Math.max(0, excessReturn - scenario.trimRules.wqdv.threshold);
+      wqdvTrim = wqdv * trimAmount;
     }
     
     // 3. FIDELIS cap logic (check before calculating income)
@@ -84,28 +95,30 @@ export function simulatePortfolio(
     }
     
     // 4. Total income for the year
-    const annualIncome = vgwdDividends + actualFidelisInterest + vwceTrim + tvbetetfToIncome + vgwdTrim;
+    const annualIncome = ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
     
     // 5. Apply trims/withdrawals
     vwce -= vwceTrim;
     tvbetetf -= (tvbetetfToIncome + tvbetetfToReinvest);
     vwce += tvbetetfToReinvest;  // Reinvest to VWCE
-    vgwd -= vgwdTrim;
+    ernx -= ernxTrim;
+    wqdv -= wqdvTrim;
     
     // 6. Grow assets for next year
     const vwceNext = vwce * (1 + vwceReturn);
     const tvbetetfNext = tvbetetf * (1 + tvbetetfReturn);
-    const vgwdNext = vgwd * (1 + vgwdReturn);
+    const ernxNext = ernx * (1 + ernxReturn);
+    const wqdvNext = wqdv * (1 + wqdvReturn);
     const fidelisNext = fidelis * (1 + fidelisRate);  // FIDELIS grows at its interest rate
     
     // 7. Calculate totals (after growth)
-    const totalCapital = vwceNext + tvbetetfNext + vgwdNext + fidelisNext;
+    const totalCapital = vwceNext + tvbetetfNext + ernxNext + wqdvNext + fidelisNext;
     
     // 8. Calculate real values (inflation-adjusted)
     const inflationFactor = Math.pow(1 + scenario.inflation, year + 1);
     const realCapital = totalCapital / inflationFactor;
     
-    const actualAnnualIncome = vgwdDividends + actualFidelisInterest + vwceTrim + tvbetetfToIncome + vgwdTrim;
+    const actualAnnualIncome = ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
     const realIncome = actualAnnualIncome / inflationFactor;
     
     results.push({
@@ -115,12 +128,15 @@ export function simulatePortfolio(
       assets: {
         vwce: vwceNext,
         tvbetetf: tvbetetfNext,
-        vgwd: vgwdNext,
+        ernx: ernxNext,
+        wqdv: wqdvNext,
         fidelis: fidelisNext
       },
       income: {
-        vgwdDividends,
-        vgwdTrim: vgwdTrim > 0 ? vgwdTrim : undefined,
+        ernxYield: ernxYieldIncome,
+        ernxTrim: ernxTrim > 0 ? ernxTrim : undefined,
+        wqdvYield: wqdvYieldIncome,
+        wqdvTrim: wqdvTrim > 0 ? wqdvTrim : undefined,
         fidelisInterest: actualFidelisInterest,
         vwceTrim,
         tvbetetfToIncome,
@@ -135,7 +151,8 @@ export function simulatePortfolio(
     // Update for next iteration
     vwce = vwceNext;
     tvbetetf = tvbetetfNext;
-    vgwd = vgwdNext;
+    ernx = ernxNext;
+    wqdv = wqdvNext;
     fidelis = fidelisNext;
   }
   
