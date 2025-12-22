@@ -15,8 +15,11 @@ class PortfolioModel(Base):
     color = Column(String, nullable=False)
     capital = Column(Float, nullable=False)
     goal = Column(String, nullable=True)
+    risk_label = Column(String, nullable=True)  # e.g., "Risk: Medium"
+    overperform_strategy = Column(JSON, nullable=True)  # {title, content: []}
     allocation = Column(JSON, nullable=False)  # {vwce, tvbetetf, vgwd, fidelis}
     rules = Column(JSON, nullable=False)  # {tvbetetfConditional}
+    strategy = Column(JSON, nullable=True)  # {overperformanceStrategy, overperformanceThreshold}
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

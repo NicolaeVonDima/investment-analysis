@@ -68,14 +68,21 @@ async def save_data(
                 PortfolioModel.id == portfolio_data.id
             ).first()
             
+            # Convert camelCase to snake_case for database
+            risk_label = getattr(portfolio_data, 'riskLabel', None) or getattr(portfolio_data, 'risk_label', None)
+            overperform_strategy = getattr(portfolio_data, 'overperformStrategy', None) or getattr(portfolio_data, 'overperform_strategy', None)
+            
             if portfolio:
                 # Update existing
                 portfolio.name = portfolio_data.name
                 portfolio.color = portfolio_data.color
                 portfolio.capital = portfolio_data.capital
                 portfolio.goal = portfolio_data.goal
+                portfolio.risk_label = risk_label
+                portfolio.overperform_strategy = overperform_strategy
                 portfolio.allocation = portfolio_data.allocation
                 portfolio.rules = portfolio_data.rules
+                portfolio.strategy = portfolio_data.strategy
             else:
                 # Create new
                 portfolio = PortfolioModel(
@@ -84,8 +91,11 @@ async def save_data(
                     color=portfolio_data.color,
                     capital=portfolio_data.capital,
                     goal=portfolio_data.goal,
+                    risk_label=risk_label,
+                    overperform_strategy=overperform_strategy,
                     allocation=portfolio_data.allocation,
-                    rules=portfolio_data.rules
+                    rules=portfolio_data.rules,
+                    strategy=portfolio_data.strategy
                 )
                 db.add(portfolio)
         
@@ -145,7 +155,20 @@ async def load_data(db: Session = Depends(get_db)):
         ).first()
         
         return LoadDataResponse(
-            portfolios=[PortfolioResponse.model_validate(p) for p in portfolios],
+            portfolios=[PortfolioResponse(
+                id=p.id,
+                name=p.name,
+                color=p.color,
+                capital=p.capital,
+                goal=getattr(p, 'goal', None),
+                riskLabel=getattr(p, 'risk_label', None),
+                overperformStrategy=getattr(p, 'overperform_strategy', None),
+                allocation=p.allocation,
+                rules=p.rules,
+                strategy=getattr(p, 'strategy', None),
+                created_at=p.created_at,
+                updated_at=p.updated_at
+            ) for p in portfolios],
             scenarios=[ScenarioResponse(
                 name=s.name,
                 inflation=s.inflation,

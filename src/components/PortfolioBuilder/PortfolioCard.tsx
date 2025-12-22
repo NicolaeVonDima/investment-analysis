@@ -3,6 +3,7 @@ import { Portfolio, YearResult } from '../../types';
 import { formatCurrency, formatPercentage } from '../../utils/formatters';
 import AllocationSlider from './AllocationSlider';
 import RulesConfig from './RulesConfig';
+import StrategyConfig from './StrategyConfig';
 import EvolutionTable from './EvolutionTable';
 
 interface PortfolioCardProps {
@@ -49,6 +50,13 @@ export default function PortfolioCard({
     });
   };
 
+  const handleStrategyChange = (strategy: Portfolio['strategy']) => {
+    onUpdate({
+      ...portfolio,
+      strategy
+    });
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg border-2 h-full flex flex-col" style={{ borderColor: portfolio.color }}>
       {/* Header */}
@@ -68,6 +76,21 @@ export default function PortfolioCard({
             />
           </div>
         </div>
+        
+        {portfolio.riskLabel && (
+          <div className="mt-1 mb-2">
+            <span 
+              className="text-xs font-medium px-2 py-0.5 rounded"
+              style={{ 
+                color: portfolio.color,
+                backgroundColor: `${portfolio.color}15`,
+                border: `1px solid ${portfolio.color}40`
+              }}
+            >
+              {portfolio.riskLabel}
+            </span>
+          </div>
+        )}
         
         {portfolio.goal && (
           <p className="text-sm text-gray-600 mt-2 italic">{portfolio.goal}</p>
@@ -137,20 +160,20 @@ export default function PortfolioCard({
         </div>
       </div>
 
-      {/* Rules Section - Collapsible */}
+      {/* Strategy Section - Collapsible */}
       <div className="p-4 border-b">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full flex justify-between items-center text-sm font-semibold text-gray-700 hover:text-primary"
         >
-          <span>Additional Settings</span>
+          <span>Strategy</span>
           <span>{isExpanded ? '▼' : '▶'}</span>
         </button>
         {isExpanded && (
           <div className="mt-3">
-            <RulesConfig
-              rules={portfolio.rules}
-              onChange={handleRulesChange}
+            <StrategyConfig
+              portfolio={portfolio}
+              onChange={handleStrategyChange}
             />
           </div>
         )}

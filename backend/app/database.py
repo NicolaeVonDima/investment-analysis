@@ -38,5 +38,34 @@ def get_db():
 def init_db():
     """Initialize database tables."""
     from app import models  # noqa: F401
+    # Create all tables - this will add new columns if they don't exist
     Base.metadata.create_all(bind=engine)
+    
+    # For SQLite, we need to manually add new columns if they don't exist
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        if 'portfolios' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('portfolios')]
+            with engine.begin() as conn:  # Use begin() for transaction
+                if 'risk_label' not in columns:
+                    try:
+                        conn.execute(text('ALTER TABLE portfolios ADD COLUMN risk_label VARCHAR'))
+                        print("Added risk_label column to portfolios table")
+                    except Exception as e:
+                        print(f"Could not add risk_label column (may already exist): {e}")
+                if 'overperform_strategy' not in columns:
+                    try:
+                        conn.execute(text('ALTER TABLE portfolios ADD COLUMN overperform_strategy TEXT'))
+                        print("Added overperform_strategy column to portfolios table")
+                    except Exception as e:
+                        print(f"Could not add overperform_strategy column (may already exist): {e}")
+                if 'strategy' not in columns:
+                    try:
+                        conn.execute(text('ALTER TABLE portfolios ADD COLUMN strategy TEXT'))
+                        print("Added strategy column to portfolios table")
+                    except Exception as e:
+                        print(f"Could not add strategy column (may already exist): {e}")
+    except Exception as e:
+        print(f"Warning: Could not migrate database schema: {e}")
 

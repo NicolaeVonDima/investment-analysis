@@ -96,19 +96,33 @@ function transformScenario(scenario: any): Scenario {
   };
 }
 
+// Transform portfolio from backend format to frontend format
+function transformPortfolio(portfolio: any): Portfolio {
+  return {
+    id: portfolio.id,
+    name: portfolio.name,
+    color: portfolio.color,
+    capital: portfolio.capital,
+    goal: portfolio.goal || undefined,
+    riskLabel: portfolio.riskLabel || portfolio.risk_label || undefined,
+    overperformStrategy: portfolio.overperformStrategy || portfolio.overperform_strategy || undefined,
+    allocation: portfolio.allocation,
+    rules: portfolio.rules,
+    strategy: portfolio.strategy || undefined
+  };
+}
+
 export async function loadData(): Promise<LoadDataResponse> {
   try {
     const response = await api.get<any>('/api/data/load');
     // Transform scenarios to ensure proper format
     const transformedScenarios = (response.data.scenarios || []).map(transformScenario);
-    
-    // Debug: log first scenario to check format
-    if (transformedScenarios.length > 0) {
-      console.log('Transformed scenario:', transformedScenarios[0]);
-    }
+    // Transform portfolios to ensure proper format
+    const transformedPortfolios = (response.data.portfolios || []).map(transformPortfolio);
     
     return {
       ...response.data,
+      portfolios: transformedPortfolios,
       scenarios: transformedScenarios
     };
   } catch (error) {

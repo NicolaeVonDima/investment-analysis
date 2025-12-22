@@ -1,9 +1,20 @@
+export type OverperformanceStrategy = 
+  | 'reinvest'      // Reinvest excess returns back into the asset
+  | 'rebalance'     // Rebalance to maintain target allocation
+  | 'income'        // Take excess as income
+  | 'diversify';    // Diversify into other assets
+
 export interface Portfolio {
   id: string;
   name: string;
   color: string;
   capital: number;
   goal?: string;
+  riskLabel?: string; // e.g., "Risk: Medium"
+  overperformStrategy?: {
+    title: string;
+    content: string[]; // Array of bullet points or lines
+  };
   allocation: {
     vwce: number;      // 0-100
     tvbetetf: number;  // 0-100
@@ -12,6 +23,10 @@ export interface Portfolio {
   };
   rules: {
     tvbetetfConditional: boolean; // Keep old conditional logic as option
+  };
+  strategy?: {
+    overperformanceStrategy: OverperformanceStrategy;
+    overperformanceThreshold?: number; // Percentage above expected return to trigger strategy
   };
 }
 

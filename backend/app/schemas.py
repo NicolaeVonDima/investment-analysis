@@ -13,8 +13,13 @@ class PortfolioBase(BaseModel):
     color: str
     capital: float
     goal: Optional[str] = None
+    riskLabel: Optional[str] = Field(None, alias="risk_label")
+    overperformStrategy: Optional[Dict[str, Any]] = Field(None, alias="overperform_strategy")
     allocation: Dict[str, float]
     rules: Dict[str, Any]
+    strategy: Optional[Dict[str, Any]] = None
+    
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class PortfolioCreate(PortfolioBase):
@@ -25,9 +30,7 @@ class PortfolioResponse(PortfolioBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class ScenarioBase(BaseModel):
