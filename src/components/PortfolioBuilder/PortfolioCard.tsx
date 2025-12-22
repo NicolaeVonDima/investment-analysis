@@ -61,47 +61,49 @@ export default function PortfolioCard({
   return (
     <div className="bg-white rounded-lg shadow-lg border-2 h-full flex flex-col" style={{ borderColor: portfolio.color }}>
       {/* Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2 flex-1">
-            <div 
-              className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-              style={{ backgroundColor: portfolio.color }}
-            />
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              className="font-bold text-lg border-none outline-none bg-transparent flex-1"
-              placeholder="Portfolio Name"
-            />
+      <div className="p-4 border-b h-[160px] flex flex-col justify-between">
+        <div>
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2 flex-1">
+              <div 
+                className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
+                style={{ backgroundColor: portfolio.color }}
+              />
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                className="font-bold text-lg border-none outline-none bg-transparent flex-1"
+                placeholder="Portfolio Name"
+              />
+            </div>
           </div>
+          
+          {(portfolio.riskLabel || portfolio.horizon) && (
+            <div className="mt-1 mb-2 flex items-center gap-2">
+              {portfolio.riskLabel && (
+                <span 
+                  className="text-xs font-medium px-2 py-0.5 rounded"
+                  style={{ 
+                    color: portfolio.color,
+                    backgroundColor: `${portfolio.color}15`,
+                    border: `1px solid ${portfolio.color}40`
+                  }}
+                >
+                  {portfolio.riskLabel}
+                </span>
+              )}
+              {portfolio.horizon && (
+                <span className="text-xs text-gray-600 font-medium">
+                  Horizon: {portfolio.horizon}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        
-        {(portfolio.riskLabel || portfolio.horizon) && (
-          <div className="mt-1 mb-2 flex items-center gap-2">
-            {portfolio.riskLabel && (
-              <span 
-                className="text-xs font-medium px-2 py-0.5 rounded"
-                style={{ 
-                  color: portfolio.color,
-                  backgroundColor: `${portfolio.color}15`,
-                  border: `1px solid ${portfolio.color}40`
-                }}
-              >
-                {portfolio.riskLabel}
-              </span>
-            )}
-            {portfolio.horizon && (
-              <span className="text-xs text-gray-600 font-medium">
-                Horizon: {portfolio.horizon}
-              </span>
-            )}
-          </div>
-        )}
-        
+
         {portfolio.goal && (
-          <p className="text-sm text-gray-600 mt-2 italic">{portfolio.goal}</p>
+          <p className="text-sm text-gray-600 italic line-clamp-3">{portfolio.goal}</p>
         )}
       </div>
 
