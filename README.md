@@ -8,12 +8,12 @@ A React-based single-page web application for comparing up to 3 investment portf
 - **Scenario Configuration**: Three pre-defined scenarios (Pessimistic, Average, Optimistic) with customizable parameters
 - **35-Year Simulation**: Track capital growth, income generation, and asset allocation over time
 - **Visual Analytics**: Multiple chart types including capital growth, monthly income, income breakdown, and asset allocation
-- **Data Persistence**: All portfolios and scenarios are automatically saved to a SQLite database
+- **Data Persistence**: All portfolios and scenarios are automatically saved to PostgreSQL database
 
 ## Tech Stack
 
 - **Frontend**: React 18+, TypeScript, Recharts, Tailwind CSS
-- **Backend**: FastAPI (Python), SQLAlchemy, SQLite
+- **Backend**: FastAPI (Python), SQLAlchemy, PostgreSQL
 - **Containerization**: Docker, Docker Compose, Nginx
 
 ## Project Structure
@@ -66,7 +66,7 @@ A React-based single-page web application for comparing up to 3 investment portf
 
 3. **Development features**:
    - Hot reloading for both frontend and backend
-   - SQLite database stored in Docker volume
+   - PostgreSQL database in Docker container
    - CORS enabled for local development
 
 ### Production
@@ -104,10 +104,10 @@ uvicorn app.main:app --reload
 
 ## Data Persistence
 
-- All portfolio configurations and scenario settings are automatically saved to SQLite database
+- All portfolio configurations and scenario settings are automatically saved to PostgreSQL database
 - Data persists across container restarts via Docker volumes
 - Auto-save triggers 1 second after any change
-- Save status indicator shows current save state
+- Database connection is configured via DATABASE_URL environment variable
 
 ## Portfolio Assets
 

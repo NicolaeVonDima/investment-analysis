@@ -4,6 +4,13 @@ export type OverperformanceStrategy =
   | 'income'        // Take excess as income
   | 'diversify';    // Diversify into other assets
 
+export interface FamilyMember {
+  id: string;
+  name: string;
+  amount: number;
+  displayOrder?: number;
+}
+
 export interface Portfolio {
   id: string;
   name: string;
@@ -12,6 +19,7 @@ export interface Portfolio {
   goal?: string;
   riskLabel?: string; // e.g., "Risk: Medium"
   horizon?: string; // e.g., "2026 - 2029"
+  selectedStrategy?: string; // For custom portfolios: "Aggressive Growth", "Balanced Allocation", or "Income Focused"
   overperformStrategy?: {
     title: string;
     content: string[]; // Array of bullet points or lines

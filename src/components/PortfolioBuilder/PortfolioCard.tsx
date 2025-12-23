@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Portfolio, YearResult } from '../../types';
 import { formatCurrency, formatPercentage } from '../../utils/formatters';
 import AllocationSlider from './AllocationSlider';
@@ -28,6 +28,11 @@ export default function PortfolioCard({
   // Fixed height for all cards to ensure consistency (increased by 20% to avoid scrolling)
   const FIXED_CARD_HEIGHT = '1080px';
 
+  // Sync local name state with portfolio prop (important for member portfolios synced from family members)
+  useEffect(() => {
+    setName(portfolio.name);
+  }, [portfolio.name]);
+
   const totalAllocation = 
     portfolio.allocation.vwce +
     portfolio.allocation.tvbetetf +
@@ -35,9 +40,15 @@ export default function PortfolioCard({
     portfolio.allocation.ayeg +
     portfolio.allocation.fidelis;
 
+  // Check if this is a member portfolio (name ends with "'s Portfolio")
+  const isMemberPortfolio = portfolio.name.endsWith("'s Portfolio");
+
   const handleNameChange = (newName: string) => {
-    setName(newName);
-    onUpdate({ ...portfolio, name: newName });
+    // Only allow editing for non-member portfolios
+    if (!isMemberPortfolio) {
+      setName(newName);
+      onUpdate({ ...portfolio, name: newName });
+    }
   };
 
   const handleAllocationChange = (asset: keyof Portfolio['allocation'], value: number) => {
@@ -126,13 +137,19 @@ export default function PortfolioCard({
                     className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
                     style={{ backgroundColor: portfolio.color }}
                   />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    className="font-bold text-lg border-none outline-none bg-transparent flex-1"
-                    placeholder="Portfolio Name"
-                  />
+                  {isMemberPortfolio ? (
+                    <span className="font-bold text-lg flex-1">
+                      {name}
+                    </span>
+                  ) : (
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      className="font-bold text-lg border-none outline-none bg-transparent flex-1"
+                      placeholder="Portfolio Name"
+                    />
+                  )}
                 </div>
                 {/* Flip Toggle Button */}
                 <button
@@ -178,6 +195,30 @@ export default function PortfolioCard({
                   Horizon: {portfolio.horizon}
                 </span>
               )}
+            </div>
+          )}
+          
+          {/* Strategy selector for custom portfolios */}
+          {isMemberPortfolio && (
+            <div className="mt-2 mb-2 flex items-center gap-2">
+              <label className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                Strategy:
+              </label>
+              <select
+                value={portfolio.selectedStrategy || ''}
+                onChange={(e) => {
+                  onUpdate({
+                    ...portfolio,
+                    selectedStrategy: e.target.value || undefined
+                  });
+                }}
+                className="flex-1 text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">-- Select Strategy --</option>
+                <option value="Aggressive Growth">Aggressive Growth</option>
+                <option value="Balanced Allocation">Balanced Allocation</option>
+                <option value="Income Focused">Income Focused</option>
+              </select>
             </div>
           )}
         </div>

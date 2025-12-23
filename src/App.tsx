@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Portfolio, Scenario, ChartType } from './types';
+import { Portfolio, Scenario, ChartType, FamilyMember } from './types';
 import { scenarios, defaultScenario } from './data/scenarios';
 import { portfolioTemplates, portfolioColors } from './data/templates';
 import { useSimulation } from './hooks/useSimulation';
@@ -7,6 +7,7 @@ import { saveData, loadData } from './services/api';
 import Header from './components/Header';
 import ScenarioSelector from './components/ScenarioSelector';
 import PortfolioCard from './components/PortfolioBuilder/PortfolioCard';
+import FamilyMembersManager from './components/FamilyMembersManager';
 import CapitalChart from './components/Charts/CapitalChart';
 import IncomeChart from './components/Charts/IncomeChart';
 import BreakdownChart from './components/Charts/BreakdownChart';
@@ -15,16 +16,60 @@ import { formatCurrency } from './utils/formatters';
 import './App.css';
 
 function App() {
-  const [globalInvestment, setGlobalInvestment] = useState(675000);
+  // Initialize with default family member (empty name will default to "Owner Portfolio")
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([
+    { id: 'default-1', name: '', amount: 675000, displayOrder: 0 }
+  ]);
+  
+  // Calculate total investment from family members
+  const totalInvestment = useMemo(() => {
+    return familyMembers.reduce((sum, member) => sum + member.amount, 0);
+  }, [familyMembers]);
+
+  // Helper function to create member portfolio
+  const createMemberPortfolio = (member: FamilyMember, existingPortfolio?: Portfolio): Portfolio => {
+    // Use "Owner Portfolio" as default name if member name is empty
+    const memberDisplayName = member.name.trim() || 'Owner Portfolio';
+    const portfolioName = `${memberDisplayName}'s Portfolio`;
+    const memberColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F'];
+    const colorIndex = (member.displayOrder || 0) % memberColors.length;
+    
+    return {
+      id: existingPortfolio?.id || `member-portfolio-${member.id}`,
+      name: portfolioName,
+      color: existingPortfolio?.color || memberColors[colorIndex],
+      capital: member.amount, // Always use member's current amount
+      goal: `Portfolio allocation for ${memberDisplayName}`,
+      riskLabel: 'Risk: Custom',
+      horizon: 'Current',
+      selectedStrategy: existingPortfolio?.selectedStrategy, // Preserve selected strategy
+      allocation: existingPortfolio?.allocation || {
+        vwce: 0,
+        tvbetetf: 0,
+        ernx: 0,
+        ayeg: 0,
+        fidelis: 0
+      },
+      rules: existingPortfolio?.rules || {
+        tvbetetfConditional: false
+      }
+    };
+  };
+
+  // Initialize portfolios with strategic templates only (no Current Allocation)
+  const strategicTemplates = portfolioTemplates.filter(t => t.name !== 'Current Allocation');
   const [portfolios, setPortfolios] = useState<Portfolio[]>(() => {
-    // Initialize with templates
-    return portfolioTemplates.map((template, index) => ({
+    // Start with strategic portfolios
+    const strategic = strategicTemplates.map((template, index) => ({
       ...template,
       id: `portfolio-${index + 1}`,
       color: portfolioColors[index],
-      capital: globalInvestment,
+      capital: totalInvestment,
       goal: template.goal
     }));
+    // Add member portfolios
+    const memberPortfolios = familyMembers.map(member => createMemberPortfolio(member));
+    return [...strategic, ...memberPortfolios];
   });
   
   const [scenariosState, setScenariosState] = useState<Scenario[]>(scenarios);
@@ -79,43 +124,112 @@ function App() {
           });
         }
         
-        // Sort portfolios to match template order and ensure all templates are present
-        const sortedPortfolios = portfolioTemplates
+        // Load family members from database first
+        let loadedFamilyMembers: FamilyMember[] = [];
+        if (data.familyMembers && data.familyMembers.length > 0) {
+          // Sort by display_order to ensure correct order
+          loadedFamilyMembers = [...data.familyMembers].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+          setFamilyMembers(loadedFamilyMembers);
+        } else {
+          // Migration: Recover family members from existing member portfolios
+          const memberPortfoliosFromDB = data.portfolios?.filter((p: Portfolio) => 
+            p.name.endsWith("'s Portfolio")
+          ) || [];
+          
+          if (memberPortfoliosFromDB.length > 0) {
+            // Extract family member info from portfolio names and IDs
+            // Sort portfolios by name to ensure consistent order, then assign display_order
+            const sortedPortfolios = [...memberPortfoliosFromDB].sort((a, b) => a.name.localeCompare(b.name));
+            loadedFamilyMembers = sortedPortfolios.map((portfolio: Portfolio, index: number) => {
+              // Extract member name from portfolio name (e.g., "Liana's Portfolio" -> "Liana")
+              const memberName = portfolio.name.replace("'s Portfolio", "").trim();
+              // Extract member ID from portfolio ID (e.g., "member-portfolio-member-1766493269405" -> "member-1766493269405")
+              const memberId = portfolio.id.replace("member-portfolio-", "");
+              
+              // If this is "Owner Portfolio" or has default-1 id, it should be first (displayOrder 0)
+              const isDefault = memberId === 'default-1' || memberName === "Owner Portfolio";
+              
+              return {
+                id: memberId,
+                name: memberName === "Owner Portfolio" ? "" : memberName,
+                amount: portfolio.capital,
+                displayOrder: isDefault ? 0 : index + 1
+              };
+            });
+            // Sort by displayOrder to ensure first member is at index 0
+            loadedFamilyMembers.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+            console.log('Recovered family members from portfolios:', loadedFamilyMembers);
+            setFamilyMembers(loadedFamilyMembers);
+          } else {
+            // Fallback: Create default family member from portfolio capital if no members exist
+            const loadedCapital = data.portfolios && data.portfolios.length > 0 
+              ? data.portfolios[0].capital 
+              : 675000;
+            loadedFamilyMembers = [
+              { id: 'default-1', name: '', amount: loadedCapital, displayOrder: 0 } // Empty name defaults to "Owner Portfolio"
+            ];
+            setFamilyMembers(loadedFamilyMembers);
+          }
+        }
+
+        // Separate strategic portfolios from member portfolios
+        const strategicPortfolioNames = strategicTemplates.map(t => t.name);
+        const loadedStrategicPortfolios: Portfolio[] = [];
+        const loadedMemberPortfolios: Portfolio[] = [];
+        
+        data.portfolios.forEach((p: Portfolio) => {
+          if (strategicPortfolioNames.includes(p.name)) {
+            loadedStrategicPortfolios.push(p);
+          } else if (p.name.endsWith("'s Portfolio")) {
+            loadedMemberPortfolios.push(p);
+          }
+        });
+
+        // Sort strategic portfolios to match template order
+        const sortedStrategicPortfolios = strategicTemplates
           .map((template, index) => {
-            const existingPortfolio = loadedPortfolioMap.get(template.name);
+            const existingPortfolio = loadedStrategicPortfolios.find(p => p.name === template.name);
             if (existingPortfolio) {
               return {
                 ...existingPortfolio,
-                color: portfolioColors[index] // Update color based on template position
+                color: portfolioColors[index],
+                capital: totalInvestment // Strategic portfolios use total investment
               };
             } else {
-              // Create new portfolio from template if it doesn't exist in database
               return {
                 ...template,
                 id: `portfolio-${index + 1}`,
                 color: portfolioColors[index],
-                capital: data.portfolios?.[0]?.capital || globalInvestment
+                capital: totalInvestment
               };
             }
           });
+
+        // Sort family members by display_order to maintain order
+        const sortedFamilyMembers = [...loadedFamilyMembers].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
         
-        // Add any portfolios not in templates at the end
-        const templateNames = portfolioTemplates.map(t => t.name);
-        const extraPortfolios = Array.from(loadedPortfolioMap.values())
-          .filter(p => !templateNames.includes(p.name))
-          .map((p, index) => ({
-            ...p,
-            id: `portfolio-${portfolioTemplates.length + index + 1}`,
-            color: portfolioColors[portfolioTemplates.length + index] || '#808080'
-          }));
-        
-        setPortfolios([...sortedPortfolios, ...extraPortfolios]);
-        // Use the capital from any portfolio (they should all be the same)
-        // If portfolios exist, use the first one's capital; otherwise keep default
-        const loadedCapital = data.portfolios && data.portfolios.length > 0 
-          ? data.portfolios[0].capital 
-          : globalInvestment;
-          setGlobalInvestment(loadedCapital);
+        // Create/update member portfolios from family members in display_order
+        const memberPortfolios = sortedFamilyMembers.map(member => {
+          // Find existing portfolio by member ID (most reliable)
+          const existingPortfolio = loadedMemberPortfolios.find(p => 
+            p.id === `member-portfolio-${member.id}`
+          );
+          
+          // Create portfolio with current member data (name and amount)
+          const portfolio = createMemberPortfolio(member, existingPortfolio);
+          
+          // Preserve allocation and rules from existing portfolio if it exists
+          if (existingPortfolio) {
+            portfolio.allocation = existingPortfolio.allocation;
+            portfolio.rules = existingPortfolio.rules;
+          }
+          
+          return portfolio;
+        });
+
+        // Ensure we always have both strategic and member portfolios
+        const allPortfolios = [...sortedStrategicPortfolios, ...memberPortfolios];
+        setPortfolios(allPortfolios);
         if (data.scenarios && data.scenarios.length > 0) {
           // Migrate scenarios: convert wqdv to ayeg
           const migratedScenarios = (data.scenarios as Scenario[]).map((scenario: any) => {
@@ -182,17 +296,31 @@ function App() {
         activeScenario,
         ...scenariosState.filter(s => s.name !== activeScenario.name)
       ];
-      // Ensure all portfolios have the current globalInvestment as their capital
-      const portfoliosToSave = portfolios.map(p => ({ ...p, capital: globalInvestment }));
+      // Update strategic portfolios to use total investment, sync member portfolios with their member's amount
+      const portfoliosToSave = portfolios.map(p => {
+        if (p.name.endsWith("'s Portfolio")) {
+          // Member portfolio - find matching family member and use their current amount
+          const memberId = p.id.replace('member-portfolio-', '');
+          const matchingMember = familyMembers.find(m => m.id === memberId);
+          if (matchingMember) {
+            return { ...p, capital: matchingMember.amount };
+          }
+          return p;
+        } else {
+          // Strategic portfolio - use total investment
+          return { ...p, capital: totalInvestment };
+        }
+      });
       await saveData({
         portfolios: portfoliosToSave,
         scenarios: allScenarios,
+        familyMembers: familyMembers,
         default_scenario_id: activeScenario.name
       });
     } catch (error) {
       console.error('Error saving data:', error);
     }
-  }, [portfolios, selectedScenario, customScenario, scenariosState, isLoading, globalInvestment]);
+  }, [portfolios, selectedScenario, customScenario, scenariosState, isLoading, totalInvestment, familyMembers]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -203,10 +331,45 @@ function App() {
     return () => clearTimeout(timer);
   }, [portfolios, selectedScenario, customScenario, saveToBackend, isLoading]);
 
-  // Update all portfolios when global investment changes
+  // Update member portfolios when family members change (but not during initial load)
   useEffect(() => {
-    setPortfolios(prev => prev.map(p => ({ ...p, capital: globalInvestment })));
-  }, [globalInvestment]);
+    // Don't run during initial load - let loadInitialData handle portfolio creation
+    if (isLoading) return;
+    
+    setPortfolios(prev => {
+      // If no portfolios exist yet, don't do anything (wait for load)
+      // Also check if we have strategic portfolios - if not, we're still loading
+      const hasStrategicPortfolios = prev.some(p => !p.name.endsWith("'s Portfolio"));
+      if (prev.length === 0 || !hasStrategicPortfolios) return prev;
+      
+      // Keep strategic portfolios, update their capital to total investment
+      const strategic = prev.filter(p => !p.name.endsWith("'s Portfolio"));
+      const updatedStrategic = strategic.map(p => ({ ...p, capital: totalInvestment }));
+      
+      // Sort family members by display_order to maintain order
+      const sortedFamilyMembers = [...familyMembers].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      
+      // Create/update member portfolios - sync with family members in display_order
+      const memberPortfolios = sortedFamilyMembers.map(member => {
+        // Find existing portfolio by member ID (most reliable)
+        const existing = prev.find(p => p.id === `member-portfolio-${member.id}`);
+        
+        // Create/update portfolio with current member data
+        const updatedPortfolio = createMemberPortfolio(member, existing);
+        
+        // Preserve allocation and rules from existing portfolio if it exists
+        if (existing) {
+          updatedPortfolio.allocation = existing.allocation;
+          updatedPortfolio.rules = existing.rules;
+        }
+        
+        return updatedPortfolio;
+      });
+      
+      return [...updatedStrategic, ...memberPortfolios];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyMembers, totalInvestment, isLoading]);
 
   const activeScenario = customScenario || selectedScenario;
   
@@ -297,6 +460,16 @@ function App() {
     return simulationResults.find(r => r.portfolioId === selectedPortfolioForBreakdown) || null;
   }, [simulationResults, selectedPortfolioForBreakdown]);
 
+  // Calculate total portfolio width to match all components
+  const totalPortfolioWidth = useMemo(() => {
+    const cardWidth = 320; // Fixed width per card
+    const gap = 24; // gap-6 = 1.5rem = 24px
+    const numPortfolios = portfolios.length;
+    if (numPortfolios === 0) return 'fit-content';
+    // Total width = (N * cardWidth) + ((N - 1) * gap)
+    return `${(numPortfolios * cardWidth) + ((numPortfolios - 1) * gap)}px`;
+  }, [portfolios.length]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -309,34 +482,19 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <Header width={totalPortfolioWidth} />
       
-      <div className="container mx-auto px-4 py-6">
-        {/* Global Investment Amount */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <label className="block text-lg font-semibold text-gray-800 mb-2">
-            Investment Amount
-          </label>
-          <p className="text-sm text-gray-600 mb-4">
-            Set the total amount you want to invest. This will be applied to all portfolios for comparison.
-          </p>
-          <div className="flex items-center gap-4">
-            <input
-              type="number"
-              value={globalInvestment}
-              onChange={(e) => setGlobalInvestment(parseFloat(e.target.value) || 0)}
-              className="px-4 py-2 border-2 border-primary rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary w-48 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              min="0"
-              step="1000"
-            />
-            <span className="text-lg font-medium text-gray-700">
-              = {formatCurrency(globalInvestment)}
-            </span>
-          </div>
+      <div className="mx-auto px-4 py-6" style={{ width: totalPortfolioWidth, maxWidth: '95vw' }}>
+        {/* Family Members & Investment Amount */}
+        <div className="mb-6" style={{ width: totalPortfolioWidth }}>
+          <FamilyMembersManager
+            familyMembers={familyMembers}
+            onUpdate={setFamilyMembers}
+          />
         </div>
 
         {/* Scenario Selector */}
-        <div className="mb-6">
+        <div className="mb-6" style={{ width: totalPortfolioWidth }}>
           <ScenarioSelector
             scenarios={scenariosState}
             selectedScenario={safeScenario}
@@ -346,12 +504,37 @@ function App() {
           />
         </div>
 
-        {/* Portfolios in 4 Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6 items-stretch">
-          {portfolios.map(portfolio => {
+        {/* Portfolios - Strategic portfolios and member portfolios */}
+        <div className="flex flex-nowrap gap-6 mb-6 items-stretch" style={{ width: 'fit-content' }}>
+          {portfolios
+            .sort((a, b) => {
+              // Strategic portfolios first (in template order), then member portfolios by family member display_order
+              const aIsMember = a.name.endsWith("'s Portfolio");
+              const bIsMember = b.name.endsWith("'s Portfolio");
+              
+              if (!aIsMember && !bIsMember) {
+                // Both strategic - maintain template order
+                const aIndex = strategicTemplates.findIndex(t => t.name === a.name);
+                const bIndex = strategicTemplates.findIndex(t => t.name === b.name);
+                return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+              }
+              if (aIsMember && !bIsMember) return 1; // Member after strategic
+              if (!aIsMember && bIsMember) return -1; // Strategic before member
+              
+              // Both member portfolios - sort by family member display_order
+              const aMemberId = a.id.replace('member-portfolio-', '');
+              const bMemberId = b.id.replace('member-portfolio-', '');
+              const aMember = familyMembers.find(m => m.id === aMemberId);
+              const bMember = familyMembers.find(m => m.id === bMemberId);
+              const aOrder = aMember?.displayOrder ?? 999;
+              const bOrder = bMember?.displayOrder ?? 999;
+              return aOrder - bOrder;
+            })
+            .map(portfolio => {
             const evolutionData = simulationResults.find(r => r.portfolioId === portfolio.id)?.years;
+            const cardWidth = 320; // Fixed width: 320px
             return (
-              <div key={portfolio.id} className="flex">
+              <div key={portfolio.id} className="flex flex-shrink-0" style={{ width: `${cardWidth}px` }}>
                 <PortfolioCard
                   portfolio={portfolio}
                   onUpdate={handleUpdatePortfolio}
@@ -364,7 +547,7 @@ function App() {
         </div>
 
         {/* Charts Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6" style={{ width: totalPortfolioWidth }}>
           <h2 className="text-xl font-semibold mb-4">Detailed Analysis</h2>
           
           {/* Chart Type Selector */}

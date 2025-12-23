@@ -3,7 +3,7 @@
  */
 
 import axios from 'axios';
-import { Portfolio, Scenario } from '../types';
+import { Portfolio, Scenario, FamilyMember } from '../types';
 
 // Create React App uses process.env.REACT_APP_*
 // In production, nginx proxies /api to backend, so use relative URLs
@@ -33,12 +33,14 @@ const api = axios.create({
 export interface SaveDataRequest {
   portfolios: Portfolio[];
   scenarios: Scenario[];
+  familyMembers?: FamilyMember[];
   default_scenario_id?: string;
 }
 
 export interface LoadDataResponse {
   portfolios: (Portfolio & { created_at?: string; updated_at?: string })[];
   scenarios: (Scenario & { id?: string; created_at?: string; updated_at?: string })[];
+  familyMembers?: (FamilyMember & { created_at?: string; updated_at?: string })[];
   default_scenario_id?: string;
 }
 
@@ -130,10 +132,21 @@ function transformPortfolio(portfolio: any): Portfolio {
     goal: portfolio.goal || undefined,
     riskLabel: portfolio.riskLabel || portfolio.risk_label || undefined,
     horizon: portfolio.horizon || undefined,
+    selectedStrategy: portfolio.selectedStrategy || portfolio.selected_strategy || undefined,
     overperformStrategy: portfolio.overperformStrategy || portfolio.overperform_strategy || undefined,
     allocation: portfolio.allocation,
     rules: portfolio.rules,
     strategy: portfolio.strategy || undefined
+  };
+}
+
+// Transform family member from backend format to frontend format
+function transformFamilyMember(member: any): FamilyMember {
+  return {
+    id: member.id,
+    name: member.name,
+    amount: member.amount,
+    displayOrder: member.displayOrder || member.display_order || 0
   };
 }
 
@@ -144,11 +157,14 @@ export async function loadData(): Promise<LoadDataResponse> {
     const transformedScenarios = (response.data.scenarios || []).map(transformScenario);
     // Transform portfolios to ensure proper format
     const transformedPortfolios = (response.data.portfolios || []).map(transformPortfolio);
+    // Transform family members to ensure proper format
+    const transformedFamilyMembers = (response.data.familyMembers || []).map(transformFamilyMember);
     
     return {
       ...response.data,
       portfolios: transformedPortfolios,
-      scenarios: transformedScenarios
+      scenarios: transformedScenarios,
+      familyMembers: transformedFamilyMembers.length > 0 ? transformedFamilyMembers : undefined
     };
   } catch (error) {
     console.error('Error loading data:', error);

@@ -15,8 +15,10 @@ class PortfolioBase(BaseModel):
     goal: Optional[str] = None
     riskLabel: Optional[str] = Field(None, alias="risk_label")
     horizon: Optional[str] = Field(None, alias="horizon")
+    selectedStrategy: Optional[str] = Field(None, alias="selected_strategy")
     overperformStrategy: Optional[Dict[str, Any]] = Field(None, alias="overperform_strategy")
     allocation: Dict[str, float]
+    # memberAllocations removed - we now use per-member portfolios instead
     rules: Dict[str, Any]
     strategy: Optional[Dict[str, Any]] = None
     
@@ -62,14 +64,40 @@ class ScenarioResponse(ScenarioBase):
         populate_by_name = True
 
 
+class FamilyMemberBase(BaseModel):
+    id: str
+    name: str
+    amount: float
+    displayOrder: Optional[int] = Field(0, alias="display_order")
+    
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FamilyMemberCreate(FamilyMemberBase):
+    pass
+
+
+class FamilyMemberResponse(FamilyMemberBase):
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
 class SaveDataRequest(BaseModel):
     portfolios: list[PortfolioBase]
     scenarios: list[ScenarioBase]
+    familyMembers: Optional[list[FamilyMemberBase]] = Field(None, alias="family_members")
     default_scenario_id: Optional[str] = None
+    
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class LoadDataResponse(BaseModel):
     portfolios: list[PortfolioResponse]
     scenarios: list[ScenarioResponse]
+    familyMembers: Optional[list[FamilyMemberResponse]] = Field(None, alias="family_members")
     default_scenario_id: Optional[str] = None
+    
+    model_config = ConfigDict(populate_by_name=True)
 

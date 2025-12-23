@@ -17,8 +17,10 @@ class PortfolioModel(Base):
     goal = Column(String, nullable=True)
     risk_label = Column(String, nullable=True)  # e.g., "Risk: Medium"
     horizon = Column(String, nullable=True)  # e.g., "2026 - 2029"
+    selected_strategy = Column(String, nullable=True)  # For custom portfolios: "Aggressive Growth", "Balanced Allocation", or "Income Focused"
     overperform_strategy = Column(JSON, nullable=True)  # {title, content: []}
     allocation = Column(JSON, nullable=False)  # {vwce, tvbetetf, ernx, ayeg, fidelis}
+    # member_allocations removed - we now use per-member portfolios instead
     rules = Column(JSON, nullable=False)  # {tvbetetfConditional}
     strategy = Column(JSON, nullable=True)  # {overperformanceStrategy, overperformanceThreshold}
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -39,6 +41,17 @@ class ScenarioModel(Base):
     trim_rules = Column(JSON, nullable=False)  # {vwce: {enabled, threshold}, ...}
     fidelis_cap = Column(Float, nullable=False)
     is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class FamilyMemberModel(Base):
+    __tablename__ = "family_members"
+
+    id = Column(String, primary_key=True, index=True)  # UUID
+    name = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

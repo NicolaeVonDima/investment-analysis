@@ -8,7 +8,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
   {
     name: 'Aggressive Growth',
     goal: 'Maximum growth potential focusing on Romanian market with global diversification backup.',
-    riskLabel: 'Risk: High to Very High',
+    riskLabel: 'Risk: High',
     horizon: '2026 - 2029',
     overperformStrategy: {
       title: 'Over-performing rule: Harvest & Rotate',

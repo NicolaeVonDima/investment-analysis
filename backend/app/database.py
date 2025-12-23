@@ -7,7 +7,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://portfolio_user:portfolio_password@localhost:5432/portfolio_db")
+# Require DATABASE_URL to be set - no local fallback
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable must be set")
 
 # Create engine with connection pooling for PostgreSQL
 engine = create_engine(
@@ -32,44 +35,14 @@ def get_db():
 
 
 def init_db():
-    """Initialize database tables."""
-    from app import models  # noqa: F401
-    # Create all tables - SQLAlchemy will handle schema migrations
+    """Initialize database tables using SQLAlchemy models.
+    
+    All tables are defined in models.py and will be created automatically.
+    For schema changes, use proper database migrations (e.g., Alembic).
+    """
+    from app import models  # noqa: F401 - Import models to register them with Base
+    # Create all tables - SQLAlchemy will handle table creation
+    # This is idempotent - existing tables won't be recreated
     Base.metadata.create_all(bind=engine)
-    
-    # Manual migration: Add tax columns if they don't exist
-    try:
-        from sqlalchemy import inspect, text
-        inspector = inspect(engine)
-        if 'scenarios' in inspector.get_table_names():
-            columns = [col['name'] for col in inspector.get_columns('scenarios')]
-            with engine.begin() as conn:
-                if 'tax_on_sale_proceeds' not in columns:
-                    try:
-                        conn.execute(text('ALTER TABLE scenarios ADD COLUMN tax_on_sale_proceeds FLOAT'))
-                        print("Added tax_on_sale_proceeds column to scenarios table")
-                    except Exception as e:
-                        print(f"Could not add tax_on_sale_proceeds column (may already exist): {e}")
-                if 'tax_on_dividends' not in columns:
-                    try:
-                        conn.execute(text('ALTER TABLE scenarios ADD COLUMN tax_on_dividends FLOAT'))
-                        print("Added tax_on_dividends column to scenarios table")
-                    except Exception as e:
-                        print(f"Could not add tax_on_dividends column (may already exist): {e}")
-                if 'growth_cushion' not in columns:
-                    try:
-                        conn.execute(text('ALTER TABLE scenarios ADD COLUMN growth_cushion FLOAT DEFAULT 0.02'))
-                        print("Added growth_cushion column to scenarios table")
-                    except Exception as e:
-                        print(f"Could not add growth_cushion column (may already exist): {e}")
-                if 'romanian_inflation' not in columns:
-                    try:
-                        conn.execute(text('ALTER TABLE scenarios ADD COLUMN romanian_inflation FLOAT DEFAULT 0.08'))
-                        print("Added romanian_inflation column to scenarios table")
-                    except Exception as e:
-                        print(f"Could not add romanian_inflation column (may already exist): {e}")
-    except Exception as e:
-        print(f"Warning: Could not migrate database schema: {e}")
-    
     print("Database tables initialized successfully")
 

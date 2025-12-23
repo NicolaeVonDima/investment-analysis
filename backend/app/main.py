@@ -10,12 +10,14 @@ from datetime import datetime, timezone
 import os
 
 from app.database import get_db, init_db
-from app.models import PortfolioModel, ScenarioModel
+from app.models import PortfolioModel, ScenarioModel, FamilyMemberModel
 from app.schemas import (
     PortfolioCreate,
     PortfolioResponse,
     ScenarioCreate,
     ScenarioResponse,
+    FamilyMemberCreate,
+    FamilyMemberResponse,
     SaveDataRequest,
     LoadDataResponse
 )
@@ -72,6 +74,7 @@ async def save_data(
             # Convert camelCase to snake_case for database
             risk_label = getattr(portfolio_data, 'riskLabel', None) or getattr(portfolio_data, 'risk_label', None)
             horizon = getattr(portfolio_data, 'horizon', None)
+            selected_strategy = getattr(portfolio_data, 'selectedStrategy', None) or getattr(portfolio_data, 'selected_strategy', None)
             overperform_strategy = getattr(portfolio_data, 'overperformStrategy', None) or getattr(portfolio_data, 'overperform_strategy', None)
             
             if portfolio:
@@ -82,8 +85,10 @@ async def save_data(
                 portfolio.goal = portfolio_data.goal
                 portfolio.risk_label = risk_label
                 portfolio.horizon = horizon
+                portfolio.selected_strategy = selected_strategy
                 portfolio.overperform_strategy = overperform_strategy
                 portfolio.allocation = portfolio_data.allocation
+                # member_allocations removed - we now use per-member portfolios instead
                 portfolio.rules = portfolio_data.rules
                 portfolio.strategy = portfolio_data.strategy
                 # Explicitly update the updated_at timestamp
@@ -98,8 +103,10 @@ async def save_data(
                     goal=portfolio_data.goal,
                     risk_label=risk_label,
                     horizon=horizon,
+                    selected_strategy=selected_strategy,
                     overperform_strategy=overperform_strategy,
                     allocation=portfolio_data.allocation,
+                    # member_allocations removed - we now use per-member portfolios instead
                     rules=portfolio_data.rules,
                     strategy=portfolio_data.strategy
                 )
@@ -156,11 +163,57 @@ async def save_data(
                 )
                 db.add(scenario)
         
+        # Save family members
+        if data.familyMembers:
+            # Get all existing member IDs
+            existing_member_ids = {m.id for m in db.query(FamilyMemberModel).all()}
+            incoming_member_ids = {m.id for m in data.familyMembers}
+            
+            # Delete members that are no longer in the incoming data
+            members_to_delete = existing_member_ids - incoming_member_ids
+            if members_to_delete:
+                db.query(FamilyMemberModel).filter(
+                    FamilyMemberModel.id.in_(list(members_to_delete))
+                ).delete(synchronize_session=False)
+            
+            # Create or update family members
+            for member_data in data.familyMembers:
+                member = db.query(FamilyMemberModel).filter(
+                    FamilyMemberModel.id == member_data.id
+                ).first()
+                
+                # Pydantic models use attribute access - use displayOrder (camelCase) as defined in schema
+                # With populate_by_name=True, we can access as displayOrder
+                try:
+                    display_order = member_data.displayOrder if member_data.displayOrder is not None else 0
+                except AttributeError:
+                    # Fallback to snake_case if camelCase doesn't work
+                    display_order = getattr(member_data, 'display_order', 0) or 0
+                
+                if member:
+                    # Update existing
+                    member.name = member_data.name
+                    member.amount = member_data.amount
+                    member.display_order = display_order
+                    member.updated_at = datetime.now(timezone.utc)
+                else:
+                    # Create new
+                    member = FamilyMemberModel(
+                        id=member_data.id,
+                        name=member_data.name,
+                        amount=member_data.amount,
+                        display_order=display_order
+                    )
+                    db.add(member)
+        
         db.commit()
         return {"status": "success", "message": "Data saved successfully"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error saving data: {str(e)}")
+        import traceback
+        error_detail = f"Error saving data: {str(e)}\n{traceback.format_exc()}"
+        print(f"ERROR in save_data: {error_detail}")  # Print to console for debugging
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @app.get("/api/data/load", response_model=LoadDataResponse)
@@ -169,10 +222,23 @@ async def load_data(db: Session = Depends(get_db)):
     try:
         portfolios = db.query(PortfolioModel).all()
         scenarios = db.query(ScenarioModel).all()
+        family_members = db.query(FamilyMemberModel).order_by(FamilyMemberModel.display_order, FamilyMemberModel.created_at).all()
         
         default_scenario = db.query(ScenarioModel).filter(
             ScenarioModel.is_default == True
         ).first()
+        
+        # Convert family members to response format
+        family_member_responses = []
+        for m in family_members:
+            family_member_responses.append(FamilyMemberResponse(
+                id=m.id,
+                name=m.name,
+                amount=m.amount,
+                displayOrder=m.display_order if m.display_order is not None else 0,
+                created_at=m.created_at,
+                updated_at=m.updated_at
+            ))
         
         return LoadDataResponse(
             portfolios=[PortfolioResponse(
@@ -183,8 +249,10 @@ async def load_data(db: Session = Depends(get_db)):
                 goal=getattr(p, 'goal', None),
                 riskLabel=getattr(p, 'risk_label', None),
                 horizon=getattr(p, 'horizon', None),
+                selectedStrategy=getattr(p, 'selected_strategy', None),
                 overperformStrategy=getattr(p, 'overperform_strategy', None),
                 allocation=p.allocation,
+                # memberAllocations removed - we now use per-member portfolios instead
                 rules=p.rules,
                 strategy=getattr(p, 'strategy', None),
                 created_at=p.created_at,
@@ -204,10 +272,14 @@ async def load_data(db: Session = Depends(get_db)):
                 created_at=s.created_at,
                 updated_at=s.updated_at
             ) for s in scenarios],
+            familyMembers=family_member_responses if len(family_member_responses) > 0 else None,
             default_scenario_id=default_scenario.name if default_scenario else None
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading data: {str(e)}")
+        import traceback
+        error_detail = f"Error loading data: {str(e)}\n{traceback.format_exc()}"
+        print(f"ERROR in load_data: {error_detail}")  # Print to console for debugging
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @app.delete("/api/data/clear")
