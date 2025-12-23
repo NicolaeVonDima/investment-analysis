@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Portfolio, Scenario, ChartType, FamilyMember } from './types';
+import { Portfolio, Scenario, ChartType, FamilyMember, YearResult } from './types';
 import { scenarios, defaultScenario } from './data/scenarios';
 import { portfolioTemplates, portfolioColors } from './data/templates';
 import { useSimulation } from './hooks/useSimulation';
@@ -7,6 +7,7 @@ import { saveData, loadData } from './services/api';
 import Header from './components/Header';
 import ScenarioSelector from './components/ScenarioSelector';
 import PortfolioCard from './components/PortfolioBuilder/PortfolioCard';
+import FamilyTotalCard from './components/PortfolioBuilder/FamilyTotalCard';
 import FamilyMembersManager from './components/FamilyMembersManager';
 import CapitalChart from './components/Charts/CapitalChart';
 import IncomeChart from './components/Charts/IncomeChart';
@@ -460,15 +461,39 @@ function App() {
     return simulationResults.find(r => r.portfolioId === selectedPortfolioForBreakdown) || null;
   }, [simulationResults, selectedPortfolioForBreakdown]);
 
+  // Create evolution data map for easy lookup
+  const evolutionDataMap = useMemo(() => {
+    const map: { [portfolioId: string]: YearResult[] } = {};
+    simulationResults.forEach(result => {
+      map[result.portfolioId] = result.years;
+    });
+    return map;
+  }, [simulationResults]);
+
   // Calculate total portfolio width to match all components
   const totalPortfolioWidth = useMemo(() => {
-    const cardWidth = 320; // Fixed width per card
+    const regularCardWidth = 320;
+    const familyCardWidth = 160;
     const gap = 24; // gap-6 = 1.5rem = 24px
+    
     const numPortfolios = portfolios.length;
     if (numPortfolios === 0) return 'fit-content';
-    // Total width = (N * cardWidth) + ((N - 1) * gap)
-    return `${(numPortfolios * cardWidth) + ((numPortfolios - 1) * gap)}px`;
-  }, [portfolios.length]);
+    
+    // Check if we have member portfolios (which means we'll show the family total card)
+    const hasMemberPortfolios = portfolios.some(p => p.name.endsWith("'s Portfolio"));
+    const numCards = hasMemberPortfolios ? numPortfolios + 1 : numPortfolios; // +1 for family card
+    
+    // Calculate width: regular cards + family card (if present)
+    let totalWidth = numPortfolios * regularCardWidth;
+    if (hasMemberPortfolios) {
+      totalWidth += familyCardWidth; // Add the narrow family card
+    }
+    
+    // Add gaps between all cards
+    totalWidth += (numCards - 1) * gap;
+    
+    return `${totalWidth}px`;
+  }, [portfolios]);
 
   if (isLoading) {
     return (
@@ -506,22 +531,20 @@ function App() {
 
         {/* Portfolios - Strategic portfolios and member portfolios */}
         <div className="flex flex-nowrap gap-6 mb-6 items-stretch" style={{ width: 'fit-content' }}>
-          {portfolios
-            .sort((a, b) => {
-              // Strategic portfolios first (in template order), then member portfolios by family member display_order
-              const aIsMember = a.name.endsWith("'s Portfolio");
-              const bIsMember = b.name.endsWith("'s Portfolio");
-              
-              if (!aIsMember && !bIsMember) {
-                // Both strategic - maintain template order
-                const aIndex = strategicTemplates.findIndex(t => t.name === a.name);
-                const bIndex = strategicTemplates.findIndex(t => t.name === b.name);
-                return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-              }
-              if (aIsMember && !bIsMember) return 1; // Member after strategic
-              if (!aIsMember && bIsMember) return -1; // Strategic before member
-              
-              // Both member portfolios - sort by family member display_order
+          {(() => {
+            // Separate strategic and member portfolios
+            const strategicPortfolios = portfolios.filter(p => !p.name.endsWith("'s Portfolio"));
+            const memberPortfolios = portfolios.filter(p => p.name.endsWith("'s Portfolio"));
+            
+            // Sort strategic by template order
+            const sortedStrategic = strategicPortfolios.sort((a, b) => {
+              const aIndex = strategicTemplates.findIndex(t => t.name === a.name);
+              const bIndex = strategicTemplates.findIndex(t => t.name === b.name);
+              return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+            });
+            
+            // Sort member portfolios by family member display_order
+            const sortedMembers = memberPortfolios.sort((a, b) => {
               const aMemberId = a.id.replace('member-portfolio-', '');
               const bMemberId = b.id.replace('member-portfolio-', '');
               const aMember = familyMembers.find(m => m.id === aMemberId);
@@ -529,21 +552,56 @@ function App() {
               const aOrder = aMember?.displayOrder ?? 999;
               const bOrder = bMember?.displayOrder ?? 999;
               return aOrder - bOrder;
-            })
-            .map(portfolio => {
-            const evolutionData = simulationResults.find(r => r.portfolioId === portfolio.id)?.years;
-            const cardWidth = 320; // Fixed width: 320px
+            });
+            
+            const regularCardWidth = 320;
+            const familyCardWidth = 160;
+            
             return (
-              <div key={portfolio.id} className="flex flex-shrink-0" style={{ width: `${cardWidth}px` }}>
-                <PortfolioCard
-                  portfolio={portfolio}
-                  onUpdate={handleUpdatePortfolio}
-                  evolutionData={evolutionData}
-                  showReal={showReal}
-                />
-              </div>
+              <>
+                {/* Strategic Portfolios */}
+                {sortedStrategic.map(portfolio => {
+                  const evolutionData = evolutionDataMap[portfolio.id];
+                  return (
+                    <div key={portfolio.id} className="flex flex-shrink-0" style={{ width: `${regularCardWidth}px` }}>
+                      <PortfolioCard
+                        portfolio={portfolio}
+                        onUpdate={handleUpdatePortfolio}
+                        evolutionData={evolutionData}
+                        showReal={showReal}
+                      />
+                    </div>
+                  );
+                })}
+                
+                {/* Family Total Card - only show if there are member portfolios */}
+                {sortedMembers.length > 0 && (
+                  <div className="flex flex-shrink-0" style={{ width: `${familyCardWidth}px` }}>
+                    <FamilyTotalCard
+                      memberPortfolios={sortedMembers}
+                      evolutionData={evolutionDataMap}
+                      showReal={showReal}
+                    />
+                  </div>
+                )}
+                
+                {/* Member Portfolios */}
+                {sortedMembers.map(portfolio => {
+                  const evolutionData = evolutionDataMap[portfolio.id];
+                  return (
+                    <div key={portfolio.id} className="flex flex-shrink-0" style={{ width: `${regularCardWidth}px` }}>
+                      <PortfolioCard
+                        portfolio={portfolio}
+                        onUpdate={handleUpdatePortfolio}
+                        evolutionData={evolutionData}
+                        showReal={showReal}
+                      />
+                    </div>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
         </div>
 
         {/* Charts Section */}
