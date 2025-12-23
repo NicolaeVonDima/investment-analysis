@@ -45,6 +45,13 @@ function App() {
         if (data.portfolios && data.portfolios.length > 0) {
           // Merge loaded portfolios with template data to ensure missing fields are populated
           data.portfolios.forEach((loadedPortfolio: Portfolio) => {
+            // Migrate wqdv to ayeg if present
+            const migratedAllocation: any = { ...loadedPortfolio.allocation };
+            if ('wqdv' in migratedAllocation && !('ayeg' in migratedAllocation)) {
+              migratedAllocation.ayeg = migratedAllocation.wqdv;
+              delete migratedAllocation.wqdv;
+            }
+            
             // Find matching template by name
             const template = portfolioTemplates.find(t => t.name === loadedPortfolio.name);
             if (template) {
@@ -58,13 +65,16 @@ function App() {
                 horizon: loadedPortfolio.horizon ?? template.horizon,
                 overperformStrategy: loadedPortfolio.overperformStrategy ?? template.overperformStrategy,
                 goal: loadedPortfolio.goal ?? template.goal,
-                // Preserve loaded allocation and rules
-                allocation: loadedPortfolio.allocation,
+                // Use migrated allocation
+                allocation: migratedAllocation,
                 rules: loadedPortfolio.rules,
                 capital: loadedPortfolio.capital
               });
             } else {
-              loadedPortfolioMap.set(loadedPortfolio.name, loadedPortfolio);
+              loadedPortfolioMap.set(loadedPortfolio.name, {
+                ...loadedPortfolio,
+                allocation: migratedAllocation
+              });
             }
           });
         }
@@ -105,10 +115,33 @@ function App() {
         const loadedCapital = data.portfolios && data.portfolios.length > 0 
           ? data.portfolios[0].capital 
           : globalInvestment;
-        setGlobalInvestment(loadedCapital);
+          setGlobalInvestment(loadedCapital);
         if (data.scenarios && data.scenarios.length > 0) {
+          // Migrate scenarios: convert wqdv to ayeg
+          const migratedScenarios = (data.scenarios as Scenario[]).map((scenario: any) => {
+            // Migrate assetReturns
+            if (scenario.assetReturns || scenario.asset_returns) {
+              const assetReturns = scenario.assetReturns || scenario.asset_returns;
+              if ('wqdv' in assetReturns && !('ayeg' in assetReturns)) {
+                assetReturns.ayeg = assetReturns.wqdv;
+                assetReturns.ayegYield = assetReturns.wqdvYield;
+                delete assetReturns.wqdv;
+                delete assetReturns.wqdvYield;
+              }
+            }
+            // Migrate trimRules
+            if (scenario.trimRules || scenario.trim_rules) {
+              const trimRules = scenario.trimRules || scenario.trim_rules;
+              if (trimRules.wqdv && !trimRules.ayeg) {
+                trimRules.ayeg = trimRules.wqdv;
+                delete trimRules.wqdv;
+              }
+            }
+            return scenario;
+          });
+          
           // Update scenarios state with loaded data, sorted in correct order
-          const loadedScenarios = (data.scenarios as Scenario[]).sort((a, b) => {
+          const loadedScenarios = migratedScenarios.sort((a, b) => {
             // Define order: Pessimistic, Average, Optimistic
             const order: Record<string, number> = {
               'Pessimistic': 1,

@@ -68,9 +68,9 @@ export default function ScenarioSelector({
   };
 
   // Calculate withdrawal rate for the selected scenario
-  // Optimistic scenario has no soft cap, others use 6%
+  // No soft cap - growth cushion controls the withdrawal rate
   const withdrawalCalc = useMemo(() => {
-    return calculateWithdrawalRateForScenario(selectedScenario); // Scenario-specific soft cap
+    return calculateWithdrawalRateForScenario(selectedScenario);
   }, [selectedScenario]);
 
   return (
@@ -144,15 +144,32 @@ export default function ScenarioSelector({
       <div className={`border-t pt-4 ${isExpanded ? getEditingBackgroundColor(selectedScenario.name) : ''} ${isExpanded ? 'rounded-lg p-4 -mx-4 -mb-4' : ''}`}>
         {isExpanded ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Inflation (%)
+                  Int Inflation (%)
                 </label>
                 <input
                   type="number"
                   value={(selectedScenario.inflation * 100).toFixed(2)}
                   onChange={(e) => handleInflationChange(parseFloat(e.target.value) / 100 || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  step="0.1"
+                  min="0"
+                  max="20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Romanian Inflation (%)
+                </label>
+                <input
+                  type="number"
+                  value={((selectedScenario.romanianInflation ?? 0.08) * 100).toFixed(2)}
+                  onChange={(e) => onUpdate({
+                    ...selectedScenario,
+                    romanianInflation: parseFloat(e.target.value) / 100 || 0.08
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
@@ -233,8 +250,8 @@ export default function ScenarioSelector({
                     </>
                   )}
                   <span className="text-gray-400">−</span>
-                  <span className="text-gray-600">Inflation:</span>
-                  <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.inflation)}</span>
+                  <span className="text-gray-600">Weighted Inflation:</span>
+                  <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedInflation)}</span>
                   <span className="text-gray-400">−</span>
                   <span className="text-gray-600">Growth Cushion:</span>
                   <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.growthCushion)}</span>
@@ -255,18 +272,15 @@ export default function ScenarioSelector({
                   {withdrawalCalc.floorApplied && (
                     <span>✓ Floor applied (0% min)</span>
                   )}
-                  {withdrawalCalc.softCapApplied && (
-                    <span>✓ Soft cap applied (6% max)</span>
-                  )}
-                  {!withdrawalCalc.floorApplied && !withdrawalCalc.softCapApplied && selectedScenario.name.toLowerCase() === 'optimistic' && (
-                    <span>* No soft cap (Optimistic)</span>
+                  {!withdrawalCalc.floorApplied && (
+                    <span className="text-gray-500 italic">No floor or cap applied</span>
                   )}
                 </div>
                 
                 {/* Note */}
                 <div className="pt-2 border-t border-purple-100">
                   <p className="text-xs text-gray-500 italic">
-                    * Default allocation: 35% VWCE, 25% TVBETETF, 10% WQDV
+                      * Default allocation: 35% VWCE, 25% TVBETETF, 10% AYEG
                   </p>
                 </div>
               </div>
@@ -315,8 +329,8 @@ export default function ScenarioSelector({
                       <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ernx)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-green-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">WQDV</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.wqdv)}</span>
+                      <span className="text-xs text-gray-600 font-medium">AYEG</span>
+                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ayeg)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1">
                       <span className="text-xs text-gray-600 font-medium">FIDELIS</span>
@@ -332,8 +346,12 @@ export default function ScenarioSelector({
                   <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Economic & Tax</h4>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">Inflation</span>
+                      <span className="text-xs text-gray-600 font-medium">Int Inflation</span>
                       <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.inflation)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
+                      <span className="text-xs text-gray-600 font-medium">Romanian Inflation</span>
+                      <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.romanianInflation ?? 0.08)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
                       <span className="text-xs text-gray-600 font-medium">Growth Cushion</span>
@@ -367,11 +385,11 @@ export default function ScenarioSelector({
                       </div>
                     )}
                     <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">- Inflation</span>
-                      <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.inflation)}</span>
+                      <span className="text-xs text-gray-600 font-medium">- Weighted Inflation</span>
+                      <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedInflation)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">- Growth Cushion (2%)</span>
+                      <span className="text-xs text-gray-600 font-medium">- Growth Cushion</span>
                       <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.growthCushion)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-purple-100">
@@ -388,20 +406,14 @@ export default function ScenarioSelector({
                       {withdrawalCalc.floorApplied && (
                         <div className="text-xs text-gray-500 mt-1">✓ Floor applied (0% minimum)</div>
                       )}
-                      {withdrawalCalc.softCapApplied && (
-                        <div className="text-xs text-gray-500 mt-1">✓ Soft cap applied (6% maximum)</div>
-                      )}
-                      {!withdrawalCalc.floorApplied && !withdrawalCalc.softCapApplied && selectedScenario.name.toLowerCase() === 'optimistic' && (
-                        <div className="text-xs text-gray-500 mt-1">* No soft cap (Optimistic scenario)</div>
+                      {!withdrawalCalc.floorApplied && (
+                        <div className="text-xs text-gray-500 mt-1 italic">No floor or cap applied</div>
                       )}
                     </div>
                   </div>
                   <div className="mt-2 pt-2 border-t border-purple-100">
                     <p className="text-xs text-gray-500 italic">
-                      * Calculated using default allocation (35% VWCE, 25% TVBETETF, 10% WQDV)
-                      {selectedScenario.name.toLowerCase() === 'optimistic' && (
-                        <span className="block mt-1">* Optimistic scenario has no soft cap</span>
-                      )}
+                      * Calculated using default allocation (35% VWCE, 25% TVBETETF, 10% AYEG)
                     </p>
                   </div>
                 </div>

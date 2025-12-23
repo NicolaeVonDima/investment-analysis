@@ -2,47 +2,45 @@ import { Scenario, Portfolio } from '../types';
 
 /**
  * Calculate withdrawal rate based on the formula:
- * Withdrawal Rate = (Weighted total return of Growth + Cashflow assets) - Inflation - (2% real growth cushion)
+ * Withdrawal Rate = (Weighted total return of Growth + Cashflow assets) - Inflation - Growth Cushion
  * 
  * Growth assets: VWCE, TVBETETF
- * Cashflow assets: WQDV
+ * Cashflow assets: AYEG
  * 
- * With hard floor at 0% and optional soft cap at 6-7%
+ * With hard floor at 0% (no soft cap - growth cushion controls the rate)
  */
 export interface WithdrawalCalculation {
   weightedReturn: number;      // Weighted return of Growth + Cashflow assets
   weightedTrimRate: number;     // Additional income from trim rules (as % of portfolio)
-  inflation: number;            // Inflation rate
-  growthCushion: number;       // 2% real growth cushion
-  rawWithdrawalRate: number;    // Before applying floor/cap
-  withdrawalRate: number;       // Final withdrawal rate (after floor/cap)
-  softCapApplied: boolean;     // Whether soft cap was applied
+  weightedInflation: number;    // Weighted inflation (TVBETETF uses Romanian, others use International)
+  growthCushion: number;       // Real growth cushion (configurable)
+  rawWithdrawalRate: number;    // Before applying floor
+  withdrawalRate: number;       // Final withdrawal rate (after floor)
   floorApplied: boolean;        // Whether floor was applied
 }
 
 export function calculateWithdrawalRate(
   scenario: Scenario,
-  portfolio: Portfolio,
-  softCap?: number  // If undefined, no soft cap is applied. Default 6% if provided
+  portfolio: Portfolio
 ): WithdrawalCalculation {
   // Calculate weighted return of Growth + Cashflow assets
   // Growth: VWCE, TVBETETF
-  // Cashflow: WQDV
+  // Cashflow: AYEG
   const growthCashflowAllocation = 
     portfolio.allocation.vwce + 
     portfolio.allocation.tvbetetf + 
-    portfolio.allocation.wqdv;
+    portfolio.allocation.ayeg;
   
   // If no Growth + Cashflow allocation, return 0
   if (growthCashflowAllocation === 0) {
+    const intInflation = scenario.inflation ?? 0.03; // Default to 3% if not set
     return {
       weightedReturn: 0,
       weightedTrimRate: 0,
-      inflation: scenario.inflation,
-      growthCushion: 0.02,
+      weightedInflation: intInflation,
+      growthCushion: scenario.growthCushion ?? 0.02,
       rawWithdrawalRate: 0,
       withdrawalRate: 0,
-      softCapApplied: false,
       floorApplied: true
     };
   }
@@ -50,72 +48,75 @@ export function calculateWithdrawalRate(
   // Calculate weighted return
   const vwceWeight = portfolio.allocation.vwce / growthCashflowAllocation;
   const tvbetetfWeight = portfolio.allocation.tvbetetf / growthCashflowAllocation;
-  const wqdvWeight = portfolio.allocation.wqdv / growthCashflowAllocation;
+  const ayegWeight = portfolio.allocation.ayeg / growthCashflowAllocation;
   
   // Calculate base weighted return (total return of assets)
   const baseWeightedReturn = 
     (vwceWeight * scenario.assetReturns.vwce) +
     (tvbetetfWeight * scenario.assetReturns.tvbetetf) +
-    (wqdvWeight * scenario.assetReturns.wqdv);
+    (ayegWeight * scenario.assetReturns.ayeg);
   
   // Calculate trim-based income rate (additional income from trimming excess returns)
   // Trim amount = max(0, (assetReturn - inflation - growthCushion) - threshold)
+  // TVBETETF uses Romanian inflation, other assets use International inflation
   // This represents income generated from excess returns above inflation + growthCushion + threshold
   const growthCushion = scenario.growthCushion ?? 0.02; // Default to 2% if not set
+  const romanianInflation = scenario.romanianInflation ?? 0.08; // Default to 8% if not set
+  const intInflation = scenario.inflation ?? 0.03; // Default to 3% if not set
   let vwceTrimRate = 0;
   if (scenario.trimRules.vwce.enabled) {
-    const excessReturn = Math.max(0, scenario.assetReturns.vwce - scenario.inflation - growthCushion);
+    const excessReturn = Math.max(0, scenario.assetReturns.vwce - intInflation - growthCushion);
     vwceTrimRate = Math.max(0, excessReturn - scenario.trimRules.vwce.threshold);
   }
   
   let tvbetetfTrimRate = 0;
   if (scenario.trimRules.tvbetetf.enabled) {
-    const excessReturn = Math.max(0, scenario.assetReturns.tvbetetf - scenario.inflation - growthCushion);
+    // TVBETETF uses Romanian inflation
+    const excessReturn = Math.max(0, scenario.assetReturns.tvbetetf - romanianInflation - growthCushion);
     tvbetetfTrimRate = Math.max(0, excessReturn - scenario.trimRules.tvbetetf.threshold);
   }
   
-  let wqdvTrimRate = 0;
-  if (scenario.trimRules.wqdv.enabled) {
-    const excessReturn = Math.max(0, scenario.assetReturns.wqdv - scenario.inflation - growthCushion);
-    wqdvTrimRate = Math.max(0, excessReturn - scenario.trimRules.wqdv.threshold);
+  let ayegTrimRate = 0;
+  if (scenario.trimRules.ayeg.enabled) {
+    const excessReturn = Math.max(0, scenario.assetReturns.ayeg - intInflation - growthCushion);
+    ayegTrimRate = Math.max(0, excessReturn - scenario.trimRules.ayeg.threshold);
   }
   
   // Weighted trim rate (additional income from trims, as % of portfolio)
   const weightedTrimRate = 
     (vwceWeight * vwceTrimRate) +
     (tvbetetfWeight * tvbetetfTrimRate) +
-    (wqdvWeight * wqdvTrimRate);
+    (ayegWeight * ayegTrimRate);
+  
+  // Calculate weighted inflation
+  // TVBETETF uses Romanian inflation, other assets use International inflation
+  const weightedInflation = 
+    (vwceWeight * intInflation) +
+    (tvbetetfWeight * romanianInflation) +
+    (ayegWeight * intInflation);
   
   // The withdrawal formula accounts for trim income as additional available withdrawal capacity
   // Total available = Base Return (capital growth) + Trim Income (converted to income)
-  // Withdrawal Rate = (Base Return + Trim Income) - Inflation - Growth Cushion
+  // Withdrawal Rate = (Base Return + Trim Income) - Weighted Inflation - Growth Cushion
   // This reflects that trim rules convert excess returns into withdrawable income
   
   const weightedReturn = baseWeightedReturn;
   
-  // Apply the formula: (Total Return + Trim Income) - Inflation - Growth Cushion
+  // Apply the formula: (Total Return + Trim Income) - Weighted Inflation - Growth Cushion
   // The trim income increases the effective withdrawal capacity
-  const rawWithdrawalRate = (weightedReturn + weightedTrimRate) - scenario.inflation - growthCushion;
+  const rawWithdrawalRate = (weightedReturn + weightedTrimRate) - weightedInflation - growthCushion;
   
-  // Apply hard floor at 0%
+  // Apply hard floor at 0% (no soft cap - growth cushion controls the rate)
   let withdrawalRate = Math.max(0, rawWithdrawalRate);
   const floorApplied = rawWithdrawalRate < 0;
-  
-  // Apply soft cap (if provided)
-  let softCapApplied = false;
-  if (softCap !== undefined && withdrawalRate > softCap) {
-    withdrawalRate = softCap;
-    softCapApplied = true;
-  }
   
   return {
     weightedReturn,
     weightedTrimRate,
-    inflation: scenario.inflation,
+    weightedInflation,
     growthCushion: growthCushion,
     rawWithdrawalRate,
     withdrawalRate,
-    softCapApplied,
     floorApplied
   };
 }
@@ -124,20 +125,17 @@ export function calculateWithdrawalRate(
  * Calculate withdrawal rate for a scenario using a default/example allocation
  * Useful for displaying withdrawal rates in scenario selector
  * 
- * Soft cap rules:
- * - Optimistic scenario: No soft cap (unlimited)
- * - Other scenarios: 6% soft cap
+ * No soft cap - growth cushion controls the withdrawal rate
  */
 export function calculateWithdrawalRateForScenario(
-  scenario: Scenario,
-  softCap?: number  // If undefined, will be determined by scenario name
+  scenario: Scenario
 ): WithdrawalCalculation {
   // Use a default allocation for demonstration (e.g., Balanced Allocation style)
   const defaultAllocation = {
     vwce: 35,
     tvbetetf: 25,
     ernx: 20,
-    wqdv: 10,
+    ayeg: 10,
     fidelis: 10
   };
   
@@ -152,17 +150,6 @@ export function calculateWithdrawalRateForScenario(
     }
   };
   
-  // Determine soft cap based on scenario name if not provided
-  let effectiveSoftCap: number | undefined = softCap;
-  if (effectiveSoftCap === undefined) {
-    // Optimistic scenario has no soft cap (unlimited)
-    if (scenario.name.toLowerCase() === 'optimistic') {
-      effectiveSoftCap = undefined; // No cap
-    } else {
-      effectiveSoftCap = 0.06; // 6% for other scenarios
-    }
-  }
-  
-  return calculateWithdrawalRate(scenario, defaultPortfolio, effectiveSoftCap);
+  return calculateWithdrawalRate(scenario, defaultPortfolio);
 }
 

@@ -34,12 +34,12 @@ export default function BreakdownChart({ result, showReal }: BreakdownChartProps
         'ERNX Trim': showReal
           ? (year.income.ernxTrim || 0) / inflationFactor
           : (year.income.ernxTrim || 0),
-        'WQDV Yield': showReal 
-          ? year.income.wqdvYield / inflationFactor
-          : year.income.wqdvYield,
-        'WQDV Trim': showReal
-          ? (year.income.wqdvTrim || 0) / inflationFactor
-          : (year.income.wqdvTrim || 0),
+        'AYEG Yield': showReal 
+          ? year.income.ayegYield / inflationFactor
+          : year.income.ayegYield,
+        'AYEG Trim': showReal
+          ? (year.income.ayegTrim || 0) / inflationFactor
+          : (year.income.ayegTrim || 0),
         'FIDELIS Yield': showReal
           ? (year.income.fidelisYield || 0) / inflationFactor
           : (year.income.fidelisYield || 0),
@@ -87,8 +87,8 @@ export default function BreakdownChart({ result, showReal }: BreakdownChartProps
           <Area type="monotone" dataKey="TVBETETF Income" stackId="1" stroke="#E76F51" fill="#E76F51" />
           <Area type="monotone" dataKey="ERNX Yield" stackId="1" stroke="#28A745" fill="#28A745" />
           <Area type="monotone" dataKey="ERNX Trim" stackId="1" stroke="#20C997" fill="#20C997" />
-          <Area type="monotone" dataKey="WQDV Yield" stackId="1" stroke="#9B59B6" fill="#9B59B6" />
-          <Area type="monotone" dataKey="WQDV Trim" stackId="1" stroke="#8E44AD" fill="#8E44AD" />
+          <Area type="monotone" dataKey="AYEG Yield" stackId="1" stroke="#9B59B6" fill="#9B59B6" />
+          <Area type="monotone" dataKey="AYEG Trim" stackId="1" stroke="#8E44AD" fill="#8E44AD" />
           <Area type="monotone" dataKey="FIDELIS Yield" stackId="1" stroke="#DC3545" fill="#DC3545" />
           <Area type="monotone" dataKey="FIDELIS Interest" stackId="1" stroke="#C82333" fill="#C82333" />
         </AreaChart>

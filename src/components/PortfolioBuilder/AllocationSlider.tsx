@@ -9,17 +9,19 @@ interface AllocationSliderProps {
 }
 
 export default function AllocationSlider({ label, value, onChange, capital }: AllocationSliderProps) {
-  const amount = capital ? (capital * value) / 100 : 0;
+  // Ensure value is a valid number, default to 0 if undefined/null
+  const safeValue = value ?? 0;
+  const amount = capital ? (capital * safeValue) / 100 : 0;
   const [amountInput, setAmountInput] = useState<string>('');
   const [isEditingAmount, setIsEditingAmount] = useState(false);
 
   // Update amount input when value or capital changes (but not while editing)
   useEffect(() => {
     if (!isEditingAmount && capital) {
-      const calculatedAmount = (capital * value) / 100;
+      const calculatedAmount = (capital * safeValue) / 100;
       setAmountInput(calculatedAmount.toFixed(0));
     }
-  }, [value, capital, isEditingAmount]);
+  }, [safeValue, capital, isEditingAmount]);
 
   const handleAmountChange = (inputValue: string) => {
     setAmountInput(inputValue);
@@ -38,7 +40,7 @@ export default function AllocationSlider({ label, value, onChange, capital }: Al
   const handleAmountBlur = () => {
     setIsEditingAmount(false);
     if (capital) {
-      const calculatedAmount = (capital * value) / 100;
+      const calculatedAmount = (capital * safeValue) / 100;
       setAmountInput(calculatedAmount.toFixed(0));
     }
   };
@@ -46,7 +48,7 @@ export default function AllocationSlider({ label, value, onChange, capital }: Al
   const handleAmountFocus = () => {
     setIsEditingAmount(true);
     if (capital) {
-      const calculatedAmount = (capital * value) / 100;
+      const calculatedAmount = (capital * safeValue) / 100;
       setAmountInput(calculatedAmount.toFixed(0));
     }
   };
@@ -67,7 +69,7 @@ export default function AllocationSlider({ label, value, onChange, capital }: Al
               placeholder={formatCurrency(0)}
             />
           )}
-          <span className="text-sm font-medium">{value.toFixed(1)}%</span>
+          <span className="text-sm font-medium">{safeValue.toFixed(1)}%</span>
         </div>
       </div>
       <input
@@ -75,11 +77,11 @@ export default function AllocationSlider({ label, value, onChange, capital }: Al
         min="0"
         max="100"
         step="0.1"
-        value={value}
+        value={safeValue}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
         style={{
-          background: `linear-gradient(to right, #1B4F72 0%, #1B4F72 ${value}%, #e5e7eb ${value}%, #e5e7eb 100%)`
+          background: `linear-gradient(to right, #1B4F72 0%, #1B4F72 ${safeValue}%, #e5e7eb ${safeValue}%, #e5e7eb 100%)`
         }}
       />
     </div>

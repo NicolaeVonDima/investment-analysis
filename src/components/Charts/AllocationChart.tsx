@@ -16,7 +16,7 @@ export default function AllocationChart({ result }: AllocationChartProps) {
       VWCE: year.assets.vwce,
       TVBETETF: year.assets.tvbetetf,
       ERNX: year.assets.ernx,
-      WQDV: year.assets.wqdv,
+      AYEG: year.assets.ayeg,
       FIDELIS: year.assets.fidelis,
     }));
   }, [result]);
@@ -55,7 +55,7 @@ export default function AllocationChart({ result }: AllocationChartProps) {
           <Area type="monotone" dataKey="VWCE" stackId="1" stroke="#2E86AB" fill="#2E86AB" />
           <Area type="monotone" dataKey="TVBETETF" stackId="1" stroke="#F4A261" fill="#F4A261" />
           <Area type="monotone" dataKey="ERNX" stackId="1" stroke="#28A745" fill="#28A745" />
-          <Area type="monotone" dataKey="WQDV" stackId="1" stroke="#9B59B6" fill="#9B59B6" />
+          <Area type="monotone" dataKey="AYEG" stackId="1" stroke="#9B59B6" fill="#9B59B6" />
           <Area type="monotone" dataKey="FIDELIS" stackId="1" stroke="#DC3545" fill="#DC3545" />
         </AreaChart>
       </ResponsiveContainer>

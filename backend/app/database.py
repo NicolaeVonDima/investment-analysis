@@ -62,6 +62,12 @@ def init_db():
                         print("Added growth_cushion column to scenarios table")
                     except Exception as e:
                         print(f"Could not add growth_cushion column (may already exist): {e}")
+                if 'romanian_inflation' not in columns:
+                    try:
+                        conn.execute(text('ALTER TABLE scenarios ADD COLUMN romanian_inflation FLOAT DEFAULT 0.08'))
+                        print("Added romanian_inflation column to scenarios table")
+                    except Exception as e:
+                        print(f"Could not add romanian_inflation column (may already exist): {e}")
     except Exception as e:
         print(f"Warning: Could not migrate database schema: {e}")
     

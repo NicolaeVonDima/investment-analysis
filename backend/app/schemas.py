@@ -38,7 +38,8 @@ class ScenarioBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
     
     name: str
-    inflation: float
+    inflation: float  # International inflation
+    romanianInflation: Optional[float] = Field(0.08, alias="romanian_inflation")  # Romanian inflation (default 8%)
     growthCushion: Optional[float] = Field(0.02, alias="growth_cushion")
     taxOnSaleProceeds: Optional[float] = Field(None, alias="tax_on_sale_proceeds")
     taxOnDividends: Optional[float] = Field(None, alias="tax_on_dividends")

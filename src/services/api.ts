@@ -61,6 +61,7 @@ function transformScenario(scenario: any): Scenario {
   return {
     name: scenario.name,
     inflation: scenario.inflation,
+    romanianInflation: scenario.romanianInflation !== undefined ? scenario.romanianInflation : (scenario.romanian_inflation !== undefined ? scenario.romanian_inflation : 0.08),
     growthCushion: scenario.growthCushion !== undefined ? scenario.growthCushion : (scenario.growth_cushion !== undefined ? scenario.growth_cushion : 0.02),
     taxOnSaleProceeds: scenario.taxOnSaleProceeds !== undefined ? scenario.taxOnSaleProceeds : (scenario.tax_on_sale_proceeds !== undefined ? scenario.tax_on_sale_proceeds : 0.10),
     taxOnDividends: scenario.taxOnDividends !== undefined ? scenario.taxOnDividends : (scenario.tax_on_dividends !== undefined ? scenario.tax_on_dividends : 0.05),
@@ -71,8 +72,9 @@ function transformScenario(scenario: any): Scenario {
       tvbetetfYield: assetReturns.tvbetetfYield !== undefined ? assetReturns.tvbetetfYield : 0,
       ernx: assetReturns.ernx || 0.06,
       ernxYield: assetReturns.ernxYield !== undefined ? assetReturns.ernxYield : 0.03,
-      wqdv: assetReturns.wqdv || 0.06,
-      wqdvYield: assetReturns.wqdvYield !== undefined ? assetReturns.wqdvYield : 0.04,
+      // Migrate wqdv to ayeg if present
+      ayeg: assetReturns.ayeg !== undefined ? assetReturns.ayeg : (assetReturns.wqdv !== undefined ? assetReturns.wqdv : 0.06),
+      ayegYield: assetReturns.ayegYield !== undefined ? assetReturns.ayegYield : (assetReturns.wqdvYield !== undefined ? assetReturns.wqdvYield : 0.04),
       fidelis: assetReturns.fidelis || 0.06,
       fidelisYield: assetReturns.fidelisYield !== undefined ? assetReturns.fidelisYield : (assetReturns.fidelis || 0.06)
     } : {
@@ -82,8 +84,8 @@ function transformScenario(scenario: any): Scenario {
       tvbetetfYield: 0,
       ernx: 0.06,
       ernxYield: 0.03,
-      wqdv: 0.06,
-      wqdvYield: 0.04,
+      ayeg: 0.06,
+      ayegYield: 0.04,
       fidelis: 0.06,
       fidelisYield: 0.06
     },
@@ -100,15 +102,19 @@ function transformScenario(scenario: any): Scenario {
         enabled: trimRules.ernx?.enabled !== undefined ? trimRules.ernx.enabled : false,
         threshold: trimRules.ernx?.threshold !== undefined ? trimRules.ernx.threshold : 0
       },
-      wqdv: {
-        enabled: trimRules.wqdv?.enabled !== undefined ? trimRules.wqdv.enabled : false,
-        threshold: trimRules.wqdv?.threshold !== undefined ? trimRules.wqdv.threshold : 0
-      }
+      // Migrate wqdv to ayeg if present
+      ayeg: trimRules.ayeg ? {
+        enabled: trimRules.ayeg.enabled !== undefined ? trimRules.ayeg.enabled : false,
+        threshold: trimRules.ayeg.threshold !== undefined ? trimRules.ayeg.threshold : 0
+      } : (trimRules.wqdv ? {
+        enabled: trimRules.wqdv.enabled !== undefined ? trimRules.wqdv.enabled : false,
+        threshold: trimRules.wqdv.threshold !== undefined ? trimRules.wqdv.threshold : 0
+      } : { enabled: false, threshold: 0 })
     } : {
       vwce: { enabled: false, threshold: 0 },
       tvbetetf: { enabled: false, threshold: 0 },
       ernx: { enabled: false, threshold: 0 },
-      wqdv: { enabled: false, threshold: 0 }
+      ayeg: { enabled: false, threshold: 0 }
     },
     fidelisCap: fidelisCap
   };

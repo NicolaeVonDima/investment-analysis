@@ -24,7 +24,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
       vwce: 35,
       tvbetetf: 55,
       ernx: 0,
-      wqdv: 10,
+      ayeg: 10,
       fidelis: 0
     },
     rules: {
@@ -49,7 +49,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
       vwce: 35,
       tvbetetf: 25,
       ernx: 15,
-      wqdv: 15,
+      ayeg: 15,
       fidelis: 10
     },
     rules: {
@@ -74,7 +74,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
       vwce: 15,
       tvbetetf: 15,
       ernx: 30,
-      wqdv: 20,
+      ayeg: 20,
       fidelis: 20
     },
     rules: {
@@ -98,7 +98,7 @@ export const portfolioTemplates: PortfolioTemplate[] = [
       vwce: 0,
       tvbetetf: 0,
       ernx: 0,
-      wqdv: 0,
+      ayeg: 0,
       fidelis: 0
     },
     rules: {

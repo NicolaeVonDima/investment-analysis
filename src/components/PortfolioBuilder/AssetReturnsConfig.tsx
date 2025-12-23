@@ -47,7 +47,7 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
     setRawInputs(newRawInputs);
   };
 
-  const handleYieldChange = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv' | 'fidelis', inputValue: string) => {
+  const handleYieldChange = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg' | 'fidelis', inputValue: string) => {
     const key = `yield_${asset}`;
     setRawInputs({ ...rawInputs, [key]: inputValue });
     
@@ -64,14 +64,14 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
     }
   };
 
-  const handleYieldBlur = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv' | 'fidelis') => {
+  const handleYieldBlur = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg' | 'fidelis') => {
     const key = `yield_${asset}`;
     const newRawInputs = { ...rawInputs };
     delete newRawInputs[key];
     setRawInputs(newRawInputs);
   };
 
-  const getYieldDisplayValue = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv' | 'fidelis'): string => {
+  const getYieldDisplayValue = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg' | 'fidelis'): string => {
     const key = `yield_${asset}`;
     if (rawInputs[key] !== undefined) {
       return rawInputs[key];
@@ -80,12 +80,12 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
     return (scenario.assetReturns[yieldKey] * 100).toFixed(2);
   };
 
-  const isYieldEnabled = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv' | 'fidelis'): boolean => {
+  const isYieldEnabled = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg' | 'fidelis'): boolean => {
     const yieldKey = `${asset}Yield` as keyof Scenario['assetReturns'];
     return scenario.assetReturns[yieldKey] > 0;
   };
 
-  const handleYieldToggle = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv' | 'fidelis', enabled: boolean) => {
+  const handleYieldToggle = (asset: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg' | 'fidelis', enabled: boolean) => {
     const yieldKey = `${asset}Yield` as keyof Scenario['assetReturns'];
     onUpdate({
       ...scenario,
@@ -113,18 +113,27 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
     });
   };
 
-  const calculateExcessReturn = (assetReturn: number): number => {
-    return Math.max(0, assetReturn - scenario.inflation);
+  const calculateExcessReturn = (assetReturn: number, assetKey: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg'): number => {
+    // Excess = Return - Inflation - Growth Cushion
+    // TVBETETF uses Romanian inflation, other assets use International inflation
+    const growthCushion = scenario.growthCushion ?? 0.02;
+    const inflation = assetKey === 'tvbetetf' 
+      ? (scenario.romanianInflation ?? 0.08) 
+      : scenario.inflation;
+    return Math.max(0, assetReturn - inflation - growthCushion);
   };
 
-  const calculateTrimAmount = (assetReturn: number, threshold: number): number => {
-    const excess = calculateExcessReturn(assetReturn);
+  const calculateTrimAmount = (assetReturn: number, threshold: number, assetKey: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg'): number => {
+    // Trim = max(0, Excess - Threshold)
+    // Where Excess = Return - Inflation - Growth Cushion
+    // TVBETETF uses Romanian inflation, other assets use International inflation
+    const excess = calculateExcessReturn(assetReturn, assetKey);
     return Math.max(0, excess - threshold);
   };
 
   const renderAssetCard = (
     assetName: string,
-    assetKey: 'vwce' | 'tvbetetf' | 'ernx' | 'wqdv',
+    assetKey: 'vwce' | 'tvbetetf' | 'ernx' | 'ayeg',
     yieldAlwaysEnabled: boolean = false
   ) => {
     const yieldEnabled = yieldAlwaysEnabled || isYieldEnabled(assetKey);
@@ -133,8 +142,8 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
       <div className="border rounded p-2 bg-gray-50">
         <div className="flex justify-between items-center mb-1">
           <label className="text-xs font-medium text-gray-700">{assetName}</label>
-          <span className="text-xs text-gray-500">
-            Excess: {formatPercentage(calculateExcessReturn(scenario.assetReturns[assetKey]))}
+          <span className="text-xs text-gray-500" title={assetKey === 'tvbetetf' ? "Excess = Return - Romanian Inflation - Growth Cushion" : "Excess = Return - International Inflation - Growth Cushion"}>
+            Excess: {formatPercentage(calculateExcessReturn(scenario.assetReturns[assetKey], assetKey))}
           </span>
         </div>
         <div className="mb-1">
@@ -200,8 +209,8 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
               onChange={(e) => handleTrimRuleChange(assetKey, 'threshold', parseFloat(e.target.value) / 100)}
               className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             />
-            <p className="text-xs text-gray-500 mt-0.5">
-              Trim: {formatPercentage(calculateTrimAmount(scenario.assetReturns[assetKey], scenario.trimRules[assetKey].threshold))}
+            <p className="text-xs text-gray-500 mt-0.5" title={assetKey === 'tvbetetf' ? "Trim = max(0, Excess - Threshold), where Excess = Return - Romanian Inflation - Growth Cushion" : "Trim = max(0, Excess - Threshold), where Excess = Return - International Inflation - Growth Cushion"}>
+              Trim: {formatPercentage(calculateTrimAmount(scenario.assetReturns[assetKey], scenario.trimRules[assetKey].threshold, assetKey))}
             </p>
           </div>
         )}
@@ -223,8 +232,8 @@ export default function AssetReturnsConfig({ scenario, onUpdate }: AssetReturnsC
         {/* ERNX */}
         {renderAssetCard('ERNX', 'ernx')}
 
-        {/* WQDV */}
-        {renderAssetCard('WQDV', 'wqdv')}
+        {/* AYEG */}
+        {renderAssetCard('AYEG', 'ayeg')}
 
         {/* FIDELIS */}
         <div className="border rounded p-2 bg-gray-50">

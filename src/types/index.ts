@@ -20,7 +20,7 @@ export interface Portfolio {
     vwce: number;      // 0-100
     tvbetetf: number;  // 0-100
     ernx: number;      // 0-100 (ultrashort bond ETF)
-    wqdv: number;      // 0-100
+    ayeg: number;      // 0-100
     fidelis: number;   // 0-100
   };
   rules: {
@@ -34,7 +34,8 @@ export interface Portfolio {
 
 export interface Scenario {
   name: string;
-  inflation: number;
+  inflation: number;           // International inflation
+  romanianInflation: number;   // Romanian inflation (used for TVBETETF)
   growthCushion: number;      // Real growth cushion (e.g., 0.02 = 2%)
   taxOnSaleProceeds: number;  // Tax rate on capital gains (e.g., 0.10 = 10%)
   taxOnDividends: number;     // Tax rate on dividends/yield (e.g., 0.05 = 5%)
@@ -45,8 +46,8 @@ export interface Scenario {
     tvbetetfYield: number; // Yield (cash/dividends) - 0 for accumulation ETFs
     ernx: number;      // Total return
     ernxYield: number; // Yield (cash/dividends)
-    wqdv: number;      // Total return
-    wqdvYield: number; // Yield (cash/dividends)
+    ayeg: number;      // Total return
+    ayegYield: number; // Yield (cash/dividends)
     fidelis: number;   // Total return (interest rate)
     fidelisYield: number; // Yield (same as return for FIDELIS, always enabled)
   };
@@ -63,7 +64,7 @@ export interface Scenario {
       enabled: boolean;
       threshold: number;
     };
-    wqdv: {
+    ayeg: {
       enabled: boolean;
       threshold: number;
     };
@@ -85,7 +86,7 @@ export interface YearResult {
     vwce: number;
     tvbetetf: number;
     ernx: number;
-    wqdv: number;
+    ayeg: number;
     fidelis: number;
   };
   income: {
@@ -96,8 +97,8 @@ export interface YearResult {
     tvbetetfReinvested: number;
     ernxYield: number;
     ernxTrim?: number;
-    wqdvYield: number;
-    wqdvTrim?: number;
+    ayegYield: number;
+    ayegTrim?: number;
     fidelisInterest: number;
     fidelisYield: number;
     total: number;

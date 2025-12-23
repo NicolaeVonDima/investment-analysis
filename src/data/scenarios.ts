@@ -3,7 +3,8 @@ import { Scenario } from '../types';
 export const scenarios: Scenario[] = [
   {
     name: 'Pessimistic',
-    inflation: 0.045,
+    inflation: 0.045,         // International inflation
+    romanianInflation: 0.08,  // Romanian inflation (default 8%)
     growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
@@ -14,8 +15,8 @@ export const scenarios: Scenario[] = [
       tvbetetfYield: 0,  // Accumulation ETF - no yield
       ernx: 0.02,
       ernxYield: 0.025,
-      wqdv: 0.025,
-      wqdvYield: 0.03,
+      ayeg: 0.025,
+      ayegYield: 0.03,
       fidelis: 0.05,
       fidelisYield: 0.05  // Same as return for FIDELIS
     },
@@ -32,7 +33,7 @@ export const scenarios: Scenario[] = [
         enabled: false,
         threshold: 0.0
       },
-      wqdv: {
+      ayeg: {
         enabled: false,
         threshold: 0.0
       }
@@ -41,7 +42,8 @@ export const scenarios: Scenario[] = [
   },
   {
     name: 'Average',
-    inflation: 0.03,
+    inflation: 0.03,          // International inflation
+    romanianInflation: 0.08,  // Romanian inflation (default 8%)
     growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
@@ -52,8 +54,8 @@ export const scenarios: Scenario[] = [
       tvbetetfYield: 0,  // Accumulation ETF - no yield
       ernx: 0.05,
       ernxYield: 0.03,
-      wqdv: 0.06,
-      wqdvYield: 0.04,
+      ayeg: 0.06,
+      ayegYield: 0.04,
       fidelis: 0.06,
       fidelisYield: 0.06  // Same as return for FIDELIS
     },
@@ -70,7 +72,7 @@ export const scenarios: Scenario[] = [
         enabled: false,
         threshold: 0.0
       },
-      wqdv: {
+      ayeg: {
         enabled: false,
         threshold: 0.0
       }
@@ -79,7 +81,8 @@ export const scenarios: Scenario[] = [
   },
   {
     name: 'Optimistic',
-    inflation: 0.02,
+    inflation: 0.02,           // International inflation
+    romanianInflation: 0.08,  // Romanian inflation (default 8%)
     growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
@@ -90,8 +93,8 @@ export const scenarios: Scenario[] = [
       tvbetetfYield: 0,  // Accumulation ETF - no yield
       ernx: 0.07,
       ernxYield: 0.035,
-      wqdv: 0.08,
-      wqdvYield: 0.045,
+      ayeg: 0.08,
+      ayegYield: 0.045,
       fidelis: 0.065,
       fidelisYield: 0.065  // Same as return for FIDELIS
     },
@@ -108,7 +111,7 @@ export const scenarios: Scenario[] = [
         enabled: false,
         threshold: 0.0
       },
-      wqdv: {
+      ayeg: {
         enabled: false,
         threshold: 0.0
       }

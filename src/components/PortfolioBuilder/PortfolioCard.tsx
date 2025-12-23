@@ -32,7 +32,7 @@ export default function PortfolioCard({
     portfolio.allocation.vwce +
     portfolio.allocation.tvbetetf +
     portfolio.allocation.ernx +
-    portfolio.allocation.wqdv +
+    portfolio.allocation.ayeg +
     portfolio.allocation.fidelis;
 
   const handleNameChange = (newName: string) => {
@@ -70,7 +70,7 @@ export default function PortfolioCard({
     { name: 'VWCE', value: portfolio.allocation.vwce, amount: (totalValue * portfolio.allocation.vwce) / 100, color: '#2E86AB' },
     { name: 'TVBETETF', value: portfolio.allocation.tvbetetf, amount: (totalValue * portfolio.allocation.tvbetetf) / 100, color: '#F4A261' },
     { name: 'ERNX', value: portfolio.allocation.ernx, amount: (totalValue * portfolio.allocation.ernx) / 100, color: '#28A745' },
-    { name: 'WQDV', value: portfolio.allocation.wqdv, amount: (totalValue * portfolio.allocation.wqdv) / 100, color: '#9B59B6' },
+    { name: 'AYEG', value: portfolio.allocation.ayeg, amount: (totalValue * portfolio.allocation.ayeg) / 100, color: '#9B59B6' },
     { name: 'FIDELIS', value: portfolio.allocation.fidelis, amount: (totalValue * portfolio.allocation.fidelis) / 100, color: '#DC3545' },
   ].filter(item => item.value > 0);
 
@@ -78,7 +78,7 @@ export default function PortfolioCard({
   const allocationRationale = useMemo(() => {
     const growth = portfolio.allocation.vwce + portfolio.allocation.tvbetetf;
     const defensive = portfolio.allocation.ernx + portfolio.allocation.fidelis;
-    const cashflow = portfolio.allocation.wqdv;
+    const cashflow = portfolio.allocation.ayeg;
     
     return [
       { name: 'Growth', value: growth, color: '#3B82F6' }, // Blue
@@ -217,10 +217,10 @@ export default function PortfolioCard({
             />
             <div 
               style={{ 
-                width: `${portfolio.allocation.wqdv}%`,
+                width: `${portfolio.allocation.ayeg}%`,
                 backgroundColor: '#9B59B6'
               }}
-              title="WQDV"
+              title="AYEG"
             />
             <div 
               style={{ 
@@ -250,9 +250,9 @@ export default function PortfolioCard({
           capital={portfolio.capital}
         />
         <AllocationSlider
-          label="WQDV"
-          value={portfolio.allocation.wqdv}
-          onChange={(value) => handleAllocationChange('wqdv', value)}
+          label="AYEG"
+          value={portfolio.allocation.ayeg}
+          onChange={(value) => handleAllocationChange('ayeg', value)}
           capital={portfolio.capital}
         />
         <AllocationSlider
@@ -559,7 +559,7 @@ export default function PortfolioCard({
                                   <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                   </svg>
-                                  <span className="text-gray-700">1.5-2.5% (from WQDV first)</span>
+                                  <span className="text-gray-700">1.5-2.5% (from AYEG first)</span>
                                 </div>
                               </td>
                             </tr>
@@ -592,7 +592,7 @@ export default function PortfolioCard({
                       <div>
                         <h5 className="text-xs font-semibold text-gray-700 mb-1">Rules:</h5>
                         <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-                          <li>WQDV dividends may be spent or reinvested</li>
+                          <li>AYEG dividends may be spent or reinvested</li>
                           <li>FIDELIS coupons <strong>must be reinvested</strong></li>
                           <li>Growth assets untouched in drawdowns</li>
                         </ul>
@@ -684,7 +684,7 @@ export default function PortfolioCard({
                       <div>
                         <h5 className="text-xs font-semibold text-gray-700 mb-1">Critical rules (explicit):</h5>
                         <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-                          <li>WQDV dividends = primary income</li>
+                          <li>AYEG dividends = primary income</li>
                           <li>FIDELIS coupons are reinvested</li>
                           <li>ERNX used as liquidity buffer</li>
                           <li>Growth assets untouched in bear markets</li>

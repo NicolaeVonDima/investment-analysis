@@ -121,6 +121,7 @@ async def save_data(
             trim_rules = scenario_data.trimRules
             fidelis_cap = scenario_data.fidelisCap
             growth_cushion = getattr(scenario_data, 'growthCushion', None) or getattr(scenario_data, 'growth_cushion', None) or 0.02
+            romanian_inflation = getattr(scenario_data, 'romanianInflation', None) or getattr(scenario_data, 'romanian_inflation', None) or 0.08
             tax_on_sale_proceeds = getattr(scenario_data, 'taxOnSaleProceeds', None) or getattr(scenario_data, 'tax_on_sale_proceeds', None)
             tax_on_dividends = getattr(scenario_data, 'taxOnDividends', None) or getattr(scenario_data, 'tax_on_dividends', None)
             
@@ -128,6 +129,7 @@ async def save_data(
                 # Update existing
                 scenario.name = scenario_data.name
                 scenario.inflation = scenario_data.inflation
+                scenario.romanian_inflation = romanian_inflation
                 scenario.growth_cushion = growth_cushion
                 scenario.tax_on_sale_proceeds = tax_on_sale_proceeds
                 scenario.tax_on_dividends = tax_on_dividends
@@ -143,6 +145,7 @@ async def save_data(
                     id=scenario_id,
                     name=scenario_data.name,
                     inflation=scenario_data.inflation,
+                    romanian_inflation=romanian_inflation,
                     growth_cushion=growth_cushion,
                     tax_on_sale_proceeds=tax_on_sale_proceeds,
                     tax_on_dividends=tax_on_dividends,
@@ -190,6 +193,7 @@ async def load_data(db: Session = Depends(get_db)):
             scenarios=[ScenarioResponse(
                 name=s.name,
                 inflation=s.inflation,
+                romanianInflation=getattr(s, 'romanian_inflation', None) or 0.08,
                 growthCushion=getattr(s, 'growth_cushion', None) or 0.02,
                 taxOnSaleProceeds=getattr(s, 'tax_on_sale_proceeds', None),
                 taxOnDividends=getattr(s, 'tax_on_dividends', None),
