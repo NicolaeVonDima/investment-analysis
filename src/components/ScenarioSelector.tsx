@@ -262,26 +262,17 @@ export default function ScenarioSelector({
                 </div>
                 
                 {/* Final Rate */}
-                <div className="pt-2 border-t border-purple-200 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-700">Final Withdrawal Rate:</span>
-                  <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
-                </div>
-                
-                {/* Indicators */}
-                <div className="pt-2 flex items-center gap-3 text-xs text-gray-600">
-                  {withdrawalCalc.floorApplied && (
-                    <span>✓ Floor applied (0% min)</span>
-                  )}
-                  {!withdrawalCalc.floorApplied && (
-                    <span className="text-gray-500 italic">No floor or cap applied</span>
-                  )}
-                </div>
-                
-                {/* Note */}
-                <div className="pt-2 border-t border-purple-100">
-                  <p className="text-xs text-gray-500 italic">
-                      * Default allocation: 35% VWCE, 25% TVBETETF, 10% AYEG
-                  </p>
+                <div className="pt-2 border-t border-purple-200 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-700">Final Withdrawal Rate:</span>
+                    <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
+                    {withdrawalCalc.floorApplied ? (
+                      <span className="text-xs text-gray-600">✓ Floor applied (0% min)</span>
+                    ) : (
+                      <span className="text-xs text-gray-500 italic">No floor or cap applied</span>
+                    )}
+                    <span className="text-xs text-gray-500 italic">* Default allocation: 35% VWCE, 25% TVBETETF, 10% AYEG</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -399,22 +390,19 @@ export default function ScenarioSelector({
                       </span>
                     </div>
                     <div className="pt-1 border-t-2 border-purple-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-700">Final Withdrawal Rate</span>
-                        <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-gray-700">Final Withdrawal Rate:</span>
+                          <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
+                          {withdrawalCalc.floorApplied ? (
+                            <span className="text-xs text-gray-500">✓ Floor applied (0% minimum)</span>
+                          ) : (
+                            <span className="text-xs text-gray-500 italic">No floor or cap applied</span>
+                          )}
+                          <span className="text-xs text-gray-500 italic">* Default allocation: 35% VWCE, 25% TVBETETF, 10% AYEG</span>
+                        </div>
                       </div>
-                      {withdrawalCalc.floorApplied && (
-                        <div className="text-xs text-gray-500 mt-1">✓ Floor applied (0% minimum)</div>
-                      )}
-                      {!withdrawalCalc.floorApplied && (
-                        <div className="text-xs text-gray-500 mt-1 italic">No floor or cap applied</div>
-                      )}
                     </div>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-purple-100">
-                    <p className="text-xs text-gray-500 italic">
-                      * Calculated using default allocation (35% VWCE, 25% TVBETETF, 10% AYEG)
-                    </p>
                   </div>
                 </div>
               </div>
