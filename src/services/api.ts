@@ -61,6 +61,7 @@ function transformScenario(scenario: any): Scenario {
   return {
     name: scenario.name,
     inflation: scenario.inflation,
+    growthCushion: scenario.growthCushion !== undefined ? scenario.growthCushion : (scenario.growth_cushion !== undefined ? scenario.growth_cushion : 0.02),
     taxOnSaleProceeds: scenario.taxOnSaleProceeds !== undefined ? scenario.taxOnSaleProceeds : (scenario.tax_on_sale_proceeds !== undefined ? scenario.tax_on_sale_proceeds : 0.10),
     taxOnDividends: scenario.taxOnDividends !== undefined ? scenario.taxOnDividends : (scenario.tax_on_dividends !== undefined ? scenario.tax_on_dividends : 0.05),
     assetReturns: assetReturns ? {

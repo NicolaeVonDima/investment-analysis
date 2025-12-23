@@ -40,11 +40,12 @@ export function simulatePortfolio(
     const fidelisInterest = fidelis * fidelisReturn;
     const fidelisYieldIncome = fidelis * fidelisYield;
     
-    // 2. Calculate trim amounts based on excess return over inflation
-    // Trim = max(0, (assetReturn - inflation) - threshold)
+    // 2. Calculate trim amounts based on excess return over inflation and growth cushion
+    // Trim = max(0, (assetReturn - inflation - growthCushion) - threshold)
+    const growthCushion = scenario.growthCushion ?? 0.02; // Default to 2% if not set
     let vwceTrim = 0;
     if (scenario.trimRules.vwce.enabled) {
-      const excessReturn = Math.max(0, vwceReturn - scenario.inflation);
+      const excessReturn = Math.max(0, vwceReturn - scenario.inflation - growthCushion);
       const trimAmount = Math.max(0, excessReturn - scenario.trimRules.vwce.threshold);
       vwceTrim = vwce * trimAmount;
     }
@@ -52,7 +53,7 @@ export function simulatePortfolio(
     let tvbetetfToIncome = 0;
     let tvbetetfToReinvest = 0;
     if (scenario.trimRules.tvbetetf.enabled) {
-      const excessReturn = Math.max(0, tvbetetfReturn - scenario.inflation);
+      const excessReturn = Math.max(0, tvbetetfReturn - scenario.inflation - growthCushion);
       const trimAmount = Math.max(0, excessReturn - scenario.trimRules.tvbetetf.threshold);
       // If using old conditional logic, apply it; otherwise use new trim logic
       if (portfolio.rules.tvbetetfConditional) {
@@ -72,14 +73,14 @@ export function simulatePortfolio(
     
     let ernxTrim = 0;
     if (scenario.trimRules.ernx.enabled) {
-      const excessReturn = Math.max(0, ernxReturn - scenario.inflation);
+      const excessReturn = Math.max(0, ernxReturn - scenario.inflation - growthCushion);
       const trimAmount = Math.max(0, excessReturn - scenario.trimRules.ernx.threshold);
       ernxTrim = ernx * trimAmount;
     }
     
     let wqdvTrim = 0;
     if (scenario.trimRules.wqdv.enabled) {
-      const excessReturn = Math.max(0, wqdvReturn - scenario.inflation);
+      const excessReturn = Math.max(0, wqdvReturn - scenario.inflation - growthCushion);
       const trimAmount = Math.max(0, excessReturn - scenario.trimRules.wqdv.threshold);
       wqdvTrim = wqdv * trimAmount;
     }

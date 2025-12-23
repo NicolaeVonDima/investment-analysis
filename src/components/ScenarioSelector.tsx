@@ -68,8 +68,9 @@ export default function ScenarioSelector({
   };
 
   // Calculate withdrawal rate for the selected scenario
+  // Optimistic scenario has no soft cap, others use 6%
   const withdrawalCalc = useMemo(() => {
-    return calculateWithdrawalRateForScenario(selectedScenario, 0.06); // 6% soft cap
+    return calculateWithdrawalRateForScenario(selectedScenario); // Scenario-specific soft cap
   }, [selectedScenario]);
 
   return (
@@ -143,7 +144,7 @@ export default function ScenarioSelector({
       <div className={`border-t pt-4 ${isExpanded ? getEditingBackgroundColor(selectedScenario.name) : ''} ${isExpanded ? 'rounded-lg p-4 -mx-4 -mb-4' : ''}`}>
         {isExpanded ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Inflation (%)
@@ -156,6 +157,23 @@ export default function ScenarioSelector({
                   step="0.1"
                   min="0"
                   max="20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Growth Cushion (%)
+                </label>
+                <input
+                  type="number"
+                  value={((selectedScenario.growthCushion ?? 0.02) * 100).toFixed(2)}
+                  onChange={(e) => onUpdate({
+                    ...selectedScenario,
+                    growthCushion: parseFloat(e.target.value) / 100 || 0.02
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  step="0.1"
+                  min="0"
+                  max="10"
                 />
               </div>
               <div>
@@ -198,6 +216,61 @@ export default function ScenarioSelector({
               scenario={selectedScenario}
               onUpdate={handleAssetReturnsUpdate}
             />
+            
+            {/* Withdrawal Rate Preview */}
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Withdrawal Rate Preview</h4>
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-3 border border-purple-100">
+                {/* Formula Display */}
+                <div className="flex items-center justify-center gap-2 flex-wrap text-sm mb-2">
+                  <span className="text-gray-600">Weighted Return:</span>
+                  <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedReturn)}</span>
+                  {withdrawalCalc.weightedTrimRate > 0 && (
+                    <>
+                      <span className="text-gray-400">+</span>
+                      <span className="text-gray-600">Trim Income:</span>
+                      <span className="font-semibold text-purple-600">{formatPercentage(withdrawalCalc.weightedTrimRate)}</span>
+                    </>
+                  )}
+                  <span className="text-gray-400">−</span>
+                  <span className="text-gray-600">Inflation:</span>
+                  <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.inflation)}</span>
+                  <span className="text-gray-400">−</span>
+                  <span className="text-gray-600">Growth Cushion:</span>
+                  <span className="font-semibold text-purple-700">{formatPercentage(withdrawalCalc.growthCushion)}</span>
+                  <span className="text-gray-400">=</span>
+                  <span className={`font-semibold ${withdrawalCalc.rawWithdrawalRate < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                    {formatPercentage(withdrawalCalc.rawWithdrawalRate)}
+                  </span>
+                </div>
+                
+                {/* Final Rate */}
+                <div className="pt-2 border-t border-purple-200 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-700">Final Withdrawal Rate:</span>
+                  <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
+                </div>
+                
+                {/* Indicators */}
+                <div className="pt-2 flex items-center gap-3 text-xs text-gray-600">
+                  {withdrawalCalc.floorApplied && (
+                    <span>✓ Floor applied (0% min)</span>
+                  )}
+                  {withdrawalCalc.softCapApplied && (
+                    <span>✓ Soft cap applied (6% max)</span>
+                  )}
+                  {!withdrawalCalc.floorApplied && !withdrawalCalc.softCapApplied && selectedScenario.name.toLowerCase() === 'optimistic' && (
+                    <span>* No soft cap (Optimistic)</span>
+                  )}
+                </div>
+                
+                {/* Note */}
+                <div className="pt-2 border-t border-purple-100">
+                  <p className="text-xs text-gray-500 italic">
+                    * Default allocation: 35% VWCE, 25% TVBETETF, 10% WQDV
+                  </p>
+                </div>
+              </div>
+            </div>
             
             {onSave && (
               <div className="pt-4 border-t border-gray-200 flex justify-end">
@@ -263,6 +336,10 @@ export default function ScenarioSelector({
                       <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.inflation)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
+                      <span className="text-xs text-gray-600 font-medium">Growth Cushion</span>
+                      <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.growthCushion ?? 0.02)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
                       <span className="text-xs text-gray-600 font-medium">Tax on Sale Proceeds</span>
                       <span className="text-base font-bold text-orange-600">{formatPercentage(selectedScenario.taxOnSaleProceeds ?? 0)}</span>
                     </div>
@@ -283,6 +360,12 @@ export default function ScenarioSelector({
                       <span className="text-xs text-gray-600 font-medium">Weighted Return (Growth+Cashflow)</span>
                       <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedReturn)}</span>
                     </div>
+                    {withdrawalCalc.weightedTrimRate > 0 && (
+                      <div className="flex items-center justify-between py-1 border-b border-purple-100">
+                        <span className="text-xs text-gray-600 font-medium">+ Trim Income</span>
+                        <span className="text-sm font-semibold text-purple-600">{formatPercentage(withdrawalCalc.weightedTrimRate)}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between py-1 border-b border-purple-100">
                       <span className="text-xs text-gray-600 font-medium">- Inflation</span>
                       <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.inflation)}</span>
@@ -308,11 +391,17 @@ export default function ScenarioSelector({
                       {withdrawalCalc.softCapApplied && (
                         <div className="text-xs text-gray-500 mt-1">✓ Soft cap applied (6% maximum)</div>
                       )}
+                      {!withdrawalCalc.floorApplied && !withdrawalCalc.softCapApplied && selectedScenario.name.toLowerCase() === 'optimistic' && (
+                        <div className="text-xs text-gray-500 mt-1">* No soft cap (Optimistic scenario)</div>
+                      )}
                     </div>
                   </div>
                   <div className="mt-2 pt-2 border-t border-purple-100">
                     <p className="text-xs text-gray-500 italic">
                       * Calculated using default allocation (35% VWCE, 25% TVBETETF, 10% WQDV)
+                      {selectedScenario.name.toLowerCase() === 'optimistic' && (
+                        <span className="block mt-1">* Optimistic scenario has no soft cap</span>
+                      )}
                     </p>
                   </div>
                 </div>

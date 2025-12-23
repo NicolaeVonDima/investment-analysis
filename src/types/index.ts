@@ -35,6 +35,7 @@ export interface Portfolio {
 export interface Scenario {
   name: string;
   inflation: number;
+  growthCushion: number;      // Real growth cushion (e.g., 0.02 = 2%)
   taxOnSaleProceeds: number;  // Tax rate on capital gains (e.g., 0.10 = 10%)
   taxOnDividends: number;     // Tax rate on dividends/yield (e.g., 0.05 = 5%)
   assetReturns: {
@@ -49,11 +50,11 @@ export interface Scenario {
     fidelis: number;   // Total return (interest rate)
     fidelisYield: number; // Yield (same as return for FIDELIS, always enabled)
   };
-  trimRules: {
-    vwce: {
-      enabled: boolean;
-      threshold: number; // Trim if (return - inflation) > threshold (e.g., 0.04 = 4%)
-    };
+    trimRules: {
+      vwce: {
+        enabled: boolean;
+        threshold: number; // Trim if (return - inflation - growthCushion) > threshold (e.g., 0.04 = 4%)
+      };
     tvbetetf: {
       enabled: boolean;
       threshold: number;

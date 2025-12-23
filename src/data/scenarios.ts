@@ -4,6 +4,7 @@ export const scenarios: Scenario[] = [
   {
     name: 'Pessimistic',
     inflation: 0.045,
+    growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
     assetReturns: {
@@ -41,6 +42,7 @@ export const scenarios: Scenario[] = [
   {
     name: 'Average',
     inflation: 0.03,
+    growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
     assetReturns: {
@@ -78,6 +80,7 @@ export const scenarios: Scenario[] = [
   {
     name: 'Optimistic',
     inflation: 0.02,
+    growthCushion: 0.02,      // 2% real growth cushion
     taxOnSaleProceeds: 0.10,  // 10% tax on capital gains
     taxOnDividends: 0.05,     // 5% tax on dividends/yield
     assetReturns: {

@@ -39,6 +39,7 @@ class ScenarioBase(BaseModel):
     
     name: str
     inflation: float
+    growthCushion: Optional[float] = Field(0.02, alias="growth_cushion")
     taxOnSaleProceeds: Optional[float] = Field(None, alias="tax_on_sale_proceeds")
     taxOnDividends: Optional[float] = Field(None, alias="tax_on_dividends")
     assetReturns: Dict[str, float] = Field(alias="asset_returns")
