@@ -31,6 +31,8 @@ class ScenarioModel(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True, index=True)
     inflation = Column(Float, nullable=False)
+    tax_on_sale_proceeds = Column(Float, nullable=True)  # Tax rate on capital gains (e.g., 0.10 = 10%)
+    tax_on_dividends = Column(Float, nullable=True)  # Tax rate on dividends/yield (e.g., 0.05 = 5%)
     asset_returns = Column(JSON, nullable=False)  # {vwce, tvbetetf, ernx, ernxYield, wqdv, wqdvYield, fidelis}
     trim_rules = Column(JSON, nullable=False)  # {vwce: {enabled, threshold}, ...}
     fidelis_cap = Column(Float, nullable=False)

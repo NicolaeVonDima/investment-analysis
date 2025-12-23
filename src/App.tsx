@@ -11,7 +11,6 @@ import CapitalChart from './components/Charts/CapitalChart';
 import IncomeChart from './components/Charts/IncomeChart';
 import BreakdownChart from './components/Charts/BreakdownChart';
 import AllocationChart from './components/Charts/AllocationChart';
-import ComparisonTable from './components/ComparisonTable';
 import { formatCurrency } from './utils/formatters';
 import './App.css';
 
@@ -101,10 +100,23 @@ function App() {
           }));
         
         setPortfolios([...sortedPortfolios, ...extraPortfolios]);
-        setGlobalInvestment(data.portfolios?.[0]?.capital || globalInvestment);
+        // Use the capital from any portfolio (they should all be the same)
+        // If portfolios exist, use the first one's capital; otherwise keep default
+        const loadedCapital = data.portfolios && data.portfolios.length > 0 
+          ? data.portfolios[0].capital 
+          : globalInvestment;
+        setGlobalInvestment(loadedCapital);
         if (data.scenarios && data.scenarios.length > 0) {
-          // Update scenarios state with loaded data
-          const loadedScenarios = data.scenarios as Scenario[];
+          // Update scenarios state with loaded data, sorted in correct order
+          const loadedScenarios = (data.scenarios as Scenario[]).sort((a, b) => {
+            // Define order: Pessimistic, Average, Optimistic
+            const order: Record<string, number> = {
+              'Pessimistic': 1,
+              'Average': 2,
+              'Optimistic': 3
+            };
+            return (order[a.name] || 999) - (order[b.name] || 999);
+          });
           setScenariosState(loadedScenarios);
           
           // Find default scenario or use first one
@@ -137,15 +149,17 @@ function App() {
         activeScenario,
         ...scenariosState.filter(s => s.name !== activeScenario.name)
       ];
+      // Ensure all portfolios have the current globalInvestment as their capital
+      const portfoliosToSave = portfolios.map(p => ({ ...p, capital: globalInvestment }));
       await saveData({
-        portfolios,
+        portfolios: portfoliosToSave,
         scenarios: allScenarios,
         default_scenario_id: activeScenario.name
       });
     } catch (error) {
       console.error('Error saving data:', error);
     }
-  }, [portfolios, selectedScenario, customScenario, scenariosState, isLoading]);
+  }, [portfolios, selectedScenario, customScenario, scenariosState, isLoading, globalInvestment]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -300,17 +314,18 @@ function App() {
         </div>
 
         {/* Portfolios in 4 Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6 items-stretch">
           {portfolios.map(portfolio => {
             const evolutionData = simulationResults.find(r => r.portfolioId === portfolio.id)?.years;
             return (
-              <PortfolioCard
-                key={portfolio.id}
-                portfolio={portfolio}
-                onUpdate={handleUpdatePortfolio}
-                evolutionData={evolutionData}
-                showReal={showReal}
-              />
+              <div key={portfolio.id} className="flex">
+                <PortfolioCard
+                  portfolio={portfolio}
+                  onUpdate={handleUpdatePortfolio}
+                  evolutionData={evolutionData}
+                  showReal={showReal}
+                />
+              </div>
             );
           })}
         </div>
@@ -411,9 +426,6 @@ function App() {
             )}
           </div>
         </div>
-
-        {/* Comparison Table */}
-        <ComparisonTable results={simulationResults} />
       </div>
     </div>
   );

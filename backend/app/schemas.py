@@ -39,6 +39,8 @@ class ScenarioBase(BaseModel):
     
     name: str
     inflation: float
+    taxOnSaleProceeds: Optional[float] = Field(None, alias="tax_on_sale_proceeds")
+    taxOnDividends: Optional[float] = Field(None, alias="tax_on_dividends")
     assetReturns: Dict[str, float] = Field(alias="asset_returns")
     trimRules: Dict[str, Dict[str, Any]] = Field(alias="trim_rules")
     fidelisCap: float = Field(alias="fidelis_cap")

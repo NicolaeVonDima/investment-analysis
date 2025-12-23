@@ -61,22 +61,30 @@ function transformScenario(scenario: any): Scenario {
   return {
     name: scenario.name,
     inflation: scenario.inflation,
+    taxOnSaleProceeds: scenario.taxOnSaleProceeds !== undefined ? scenario.taxOnSaleProceeds : (scenario.tax_on_sale_proceeds !== undefined ? scenario.tax_on_sale_proceeds : 0.10),
+    taxOnDividends: scenario.taxOnDividends !== undefined ? scenario.taxOnDividends : (scenario.tax_on_dividends !== undefined ? scenario.tax_on_dividends : 0.05),
     assetReturns: assetReturns ? {
       vwce: assetReturns.vwce || 0.07,
+      vwceYield: assetReturns.vwceYield !== undefined ? assetReturns.vwceYield : 0,
       tvbetetf: assetReturns.tvbetetf || 0.08,
+      tvbetetfYield: assetReturns.tvbetetfYield !== undefined ? assetReturns.tvbetetfYield : 0,
       ernx: assetReturns.ernx || 0.06,
-      ernxYield: assetReturns.ernxYield || 0.03,
+      ernxYield: assetReturns.ernxYield !== undefined ? assetReturns.ernxYield : 0.03,
       wqdv: assetReturns.wqdv || 0.06,
-      wqdvYield: assetReturns.wqdvYield || 0.04,
-      fidelis: assetReturns.fidelis || 0.06
+      wqdvYield: assetReturns.wqdvYield !== undefined ? assetReturns.wqdvYield : 0.04,
+      fidelis: assetReturns.fidelis || 0.06,
+      fidelisYield: assetReturns.fidelisYield !== undefined ? assetReturns.fidelisYield : (assetReturns.fidelis || 0.06)
     } : {
       vwce: 0.07,
+      vwceYield: 0,
       tvbetetf: 0.08,
+      tvbetetfYield: 0,
       ernx: 0.06,
       ernxYield: 0.03,
       wqdv: 0.06,
       wqdvYield: 0.04,
-      fidelis: 0.06
+      fidelis: 0.06,
+      fidelisYield: 0.06
     },
     trimRules: trimRules ? {
       vwce: {

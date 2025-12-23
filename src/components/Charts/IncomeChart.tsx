@@ -33,7 +33,7 @@ export default function IncomeChart({ results, showReal }: IncomeChartProps) {
         Monthly Income ({showReal ? 'Real' : 'Nominal'})
       </h3>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
+        <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis 
             dataKey="year" 
@@ -49,7 +49,7 @@ export default function IncomeChart({ results, showReal }: IncomeChartProps) {
             formatter={(value: number) => formatCurrency(value)}
             labelFormatter={(label) => `Year: ${label}`}
           />
-          <Legend />
+          <Legend wrapperStyle={{ paddingTop: '20px' }} />
           {results.map((result) => (
             <Line
               key={result.portfolioId}

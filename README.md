@@ -55,9 +55,9 @@ A React-based single-page web application for comparing up to 3 investment portf
 ### Development
 
 1. **Start development environment**:
-   ```bash
+```bash
    docker-compose -f docker-compose.dev.yml up --build
-   ```
+```
 
 2. **Access the application**:
    - Frontend: http://localhost:3000
@@ -72,7 +72,7 @@ A React-based single-page web application for comparing up to 3 investment portf
 ### Production
 
 1. **Build and start production environment**:
-   ```bash
+```bash
    docker-compose up --build -d
    ```
 
@@ -83,14 +83,14 @@ A React-based single-page web application for comparing up to 3 investment portf
 ### Local Development (without Docker)
 
 1. **Backend**:
-   ```bash
+```bash
    cd backend
    pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
+uvicorn app.main:app --reload
+```
 
 2. **Frontend**:
-   ```bash
+```bash
    npm install
    npm start
    ```

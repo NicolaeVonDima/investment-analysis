@@ -29,11 +29,29 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - portfolio_db_data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/portfolio_data.db
+      - DATABASE_URL=postgresql://portfolio_user:portfolio_password@postgres:5432/portfolio_db
       - CORS_ALLOW_ORIGINS=*
+    depends_on:
+      - postgres
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: portfolio-postgres-dev
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=portfolio_user
+      - POSTGRES_PASSWORD=portfolio_password
+      - POSTGRES_DB=portfolio_db
+    volumes:
+      - portfolio_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio_user -d portfolio_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   portfolio_db_data:

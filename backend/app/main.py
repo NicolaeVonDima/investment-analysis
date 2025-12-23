@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timezone
 import os
 
 from app.database import get_db, init_db
@@ -85,6 +86,8 @@ async def save_data(
                 portfolio.allocation = portfolio_data.allocation
                 portfolio.rules = portfolio_data.rules
                 portfolio.strategy = portfolio_data.strategy
+                # Explicitly update the updated_at timestamp
+                portfolio.updated_at = datetime.now(timezone.utc)
             else:
                 # Create new
                 portfolio = PortfolioModel(
@@ -117,21 +120,29 @@ async def save_data(
             asset_returns = scenario_data.assetReturns
             trim_rules = scenario_data.trimRules
             fidelis_cap = scenario_data.fidelisCap
+            tax_on_sale_proceeds = getattr(scenario_data, 'taxOnSaleProceeds', None) or getattr(scenario_data, 'tax_on_sale_proceeds', None)
+            tax_on_dividends = getattr(scenario_data, 'taxOnDividends', None) or getattr(scenario_data, 'tax_on_dividends', None)
             
             if scenario:
                 # Update existing
                 scenario.name = scenario_data.name
                 scenario.inflation = scenario_data.inflation
+                scenario.tax_on_sale_proceeds = tax_on_sale_proceeds
+                scenario.tax_on_dividends = tax_on_dividends
                 scenario.asset_returns = asset_returns
                 scenario.trim_rules = trim_rules
                 scenario.fidelis_cap = fidelis_cap
                 scenario.is_default = (data.default_scenario_id == scenario_data.name)
+                # Explicitly update the updated_at timestamp
+                scenario.updated_at = datetime.now(timezone.utc)
             else:
                 # Create new
                 scenario = ScenarioModel(
                     id=scenario_id,
                     name=scenario_data.name,
                     inflation=scenario_data.inflation,
+                    tax_on_sale_proceeds=tax_on_sale_proceeds,
+                    tax_on_dividends=tax_on_dividends,
                     asset_returns=asset_returns,
                     trim_rules=trim_rules,
                     fidelis_cap=fidelis_cap,
@@ -176,6 +187,8 @@ async def load_data(db: Session = Depends(get_db)):
             scenarios=[ScenarioResponse(
                 name=s.name,
                 inflation=s.inflation,
+                taxOnSaleProceeds=getattr(s, 'tax_on_sale_proceeds', None),
+                taxOnDividends=getattr(s, 'tax_on_dividends', None),
                 assetReturns=s.asset_returns,
                 trimRules=s.trim_rules,
                 fidelisCap=s.fidelis_cap,

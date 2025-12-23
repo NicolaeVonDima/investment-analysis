@@ -35,7 +35,7 @@ export default function AllocationChart({ result }: AllocationChartProps) {
         Asset Allocation Over Time - {result.portfolioName}
       </h3>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
+        <AreaChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis 
             dataKey="year" 
@@ -51,7 +51,7 @@ export default function AllocationChart({ result }: AllocationChartProps) {
             formatter={(value: number) => formatCurrency(value)}
             labelFormatter={(label) => `Year: ${label}`}
           />
-          <Legend />
+          <Legend wrapperStyle={{ paddingTop: '20px' }} />
           <Area type="monotone" dataKey="VWCE" stackId="1" stroke="#2E86AB" fill="#2E86AB" />
           <Area type="monotone" dataKey="TVBETETF" stackId="1" stroke="#F4A261" fill="#F4A261" />
           <Area type="monotone" dataKey="ERNX" stackId="1" stroke="#28A745" fill="#28A745" />

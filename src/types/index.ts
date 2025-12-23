@@ -35,14 +35,19 @@ export interface Portfolio {
 export interface Scenario {
   name: string;
   inflation: number;
+  taxOnSaleProceeds: number;  // Tax rate on capital gains (e.g., 0.10 = 10%)
+  taxOnDividends: number;     // Tax rate on dividends/yield (e.g., 0.05 = 5%)
   assetReturns: {
-    vwce: number;      // Annual return rate (e.g., 0.07 = 7%)
-    tvbetetf: number;  // Annual return rate
-    ernx: number;      // Annual return rate
-    ernxYield: number; // Yield for ERNX (ultrashort bond ETF)
-    wqdv: number;      // Annual return rate
-    wqdvYield: number; // Yield for WQDV
-    fidelis: number;   // Interest rate for FIDELIS
+    vwce: number;      // Total return (e.g., 0.07 = 7%)
+    vwceYield: number; // Yield (cash/dividends) - 0 for accumulation ETFs
+    tvbetetf: number;  // Total return
+    tvbetetfYield: number; // Yield (cash/dividends) - 0 for accumulation ETFs
+    ernx: number;      // Total return
+    ernxYield: number; // Yield (cash/dividends)
+    wqdv: number;      // Total return
+    wqdvYield: number; // Yield (cash/dividends)
+    fidelis: number;   // Total return (interest rate)
+    fidelisYield: number; // Yield (same as return for FIDELIS, always enabled)
   };
   trimRules: {
     vwce: {
@@ -83,14 +88,17 @@ export interface YearResult {
     fidelis: number;
   };
   income: {
+    vwceYield?: number;
+    vwceTrim: number;
+    tvbetetfYield?: number;
+    tvbetetfToIncome: number;
+    tvbetetfReinvested: number;
     ernxYield: number;
     ernxTrim?: number;
     wqdvYield: number;
     wqdvTrim?: number;
     fidelisInterest: number;
-    vwceTrim: number;
-    tvbetetfToIncome: number;
-    tvbetetfReinvested: number;
+    fidelisYield: number;
     total: number;
     totalReal: number;
   };

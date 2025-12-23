@@ -22,17 +22,23 @@ export function simulatePortfolio(
     
     // Use scenario-specific asset returns
     const vwceReturn = scenario.assetReturns.vwce;
+    const vwceYield = scenario.assetReturns.vwceYield;
     const tvbetetfReturn = scenario.assetReturns.tvbetetf;
+    const tvbetetfYield = scenario.assetReturns.tvbetetfYield;
     const ernxReturn = scenario.assetReturns.ernx;
     const ernxYield = scenario.assetReturns.ernxYield;
     const wqdvReturn = scenario.assetReturns.wqdv;
     const wqdvYield = scenario.assetReturns.wqdvYield;
-    const fidelisRate = scenario.assetReturns.fidelis;
+    const fidelisReturn = scenario.assetReturns.fidelis;
+    const fidelisYield = scenario.assetReturns.fidelisYield;
     
     // 1. Calculate income BEFORE applying trims
+    const vwceYieldIncome = vwce * vwceYield;
+    const tvbetetfYieldIncome = tvbetetf * tvbetetfYield;
     const ernxYieldIncome = ernx * ernxYield;
     const wqdvYieldIncome = wqdv * wqdvYield;
-    const fidelisInterest = fidelis * fidelisRate;
+    const fidelisInterest = fidelis * fidelisReturn;
+    const fidelisYieldIncome = fidelis * fidelisYield;
     
     // 2. Calculate trim amounts based on excess return over inflation
     // Trim = max(0, (assetReturn - inflation) - threshold)
@@ -95,7 +101,7 @@ export function simulatePortfolio(
     }
     
     // 4. Total income for the year
-    const annualIncome = ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
+    const annualIncome = vwceYieldIncome + tvbetetfYieldIncome + ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
     
     // 5. Apply trims/withdrawals
     vwce -= vwceTrim;
@@ -105,11 +111,15 @@ export function simulatePortfolio(
     wqdv -= wqdvTrim;
     
     // 6. Grow assets for next year
-    const vwceNext = vwce * (1 + vwceReturn);
-    const tvbetetfNext = tvbetetf * (1 + tvbetetfReturn);
-    const ernxNext = ernx * (1 + ernxReturn);
-    const wqdvNext = wqdv * (1 + wqdvReturn);
-    const fidelisNext = fidelis * (1 + fidelisRate);  // FIDELIS grows at its interest rate
+    // For all assets: capital grows by (return - yield)
+    // - Accumulation ETFs (yield = 0): capital grows by full return
+    // - Distribution assets: capital grows by (return - yield), yield paid as income
+    // - FIDELIS: capital grows by (return - yield). If yield = return, capital doesn't grow (interest paid out)
+    const vwceNext = vwce * (1 + vwceReturn - vwceYield);
+    const tvbetetfNext = tvbetetf * (1 + tvbetetfReturn - tvbetetfYield);
+    const ernxNext = ernx * (1 + ernxReturn - ernxYield);
+    const wqdvNext = wqdv * (1 + wqdvReturn - wqdvYield);
+    const fidelisNext = fidelis * (1 + fidelisReturn - fidelisYield);
     
     // 7. Calculate totals (after growth)
     const totalCapital = vwceNext + tvbetetfNext + ernxNext + wqdvNext + fidelisNext;
@@ -118,7 +128,7 @@ export function simulatePortfolio(
     const inflationFactor = Math.pow(1 + scenario.inflation, year + 1);
     const realCapital = totalCapital / inflationFactor;
     
-    const actualAnnualIncome = ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
+    const actualAnnualIncome = vwceYieldIncome + tvbetetfYieldIncome + ernxYieldIncome + wqdvYieldIncome + actualFidelisInterest + vwceTrim + tvbetetfToIncome + ernxTrim + wqdvTrim;
     const realIncome = actualAnnualIncome / inflationFactor;
     
     results.push({
@@ -133,14 +143,17 @@ export function simulatePortfolio(
         fidelis: fidelisNext
       },
       income: {
+        vwceYield: vwceYieldIncome > 0 ? vwceYieldIncome : undefined,
+        vwceTrim,
+        tvbetetfYield: tvbetetfYieldIncome > 0 ? tvbetetfYieldIncome : undefined,
+        tvbetetfToIncome,
+        tvbetetfReinvested: tvbetetfToReinvest,
         ernxYield: ernxYieldIncome,
         ernxTrim: ernxTrim > 0 ? ernxTrim : undefined,
         wqdvYield: wqdvYieldIncome,
         wqdvTrim: wqdvTrim > 0 ? wqdvTrim : undefined,
         fidelisInterest: actualFidelisInterest,
-        vwceTrim,
-        tvbetetfToIncome,
-        tvbetetfReinvested: tvbetetfToReinvest,
+        fidelisYield: fidelisYieldIncome,
         total: actualAnnualIncome,
         totalReal: realIncome
       },
