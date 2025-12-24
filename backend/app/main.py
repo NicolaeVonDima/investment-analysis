@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import os
 
 from app.database import get_db, init_db
-from app.models import PortfolioModel, ScenarioModel, FamilyMemberModel
+from app.models import PortfolioModel, ScenarioModel, FamilyMemberModel, UserModel
 from app.schemas import (
     PortfolioCreate,
     PortfolioResponse,
@@ -21,6 +21,9 @@ from app.schemas import (
     SaveDataRequest,
     LoadDataResponse
 )
+from app.auth import get_current_user_optional
+from app.auth_routes import router as auth_router
+from app.admin_routes import router as admin_router
 
 app = FastAPI(
     title="Portfolio Simulator API",
@@ -43,6 +46,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include auth routes
+app.include_router(auth_router)
+# Include admin routes
+app.include_router(admin_router)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -61,15 +69,20 @@ async def health():
 @app.post("/api/data/save", response_model=dict)
 async def save_data(
     data: SaveDataRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_optional)
 ):
     """Save all portfolios and scenarios."""
     try:
+        user_id = current_user.id if current_user else None
+        
         # Save portfolios
         for portfolio_data in data.portfolios:
-            portfolio = db.query(PortfolioModel).filter(
-                PortfolioModel.id == portfolio_data.id
-            ).first()
+            # Filter by user_id if authenticated, or by id only if not
+            query = db.query(PortfolioModel).filter(PortfolioModel.id == portfolio_data.id)
+            if user_id:
+                query = query.filter(PortfolioModel.user_id == user_id)
+            portfolio = query.first()
             
             # Convert camelCase to snake_case for database
             risk_label = getattr(portfolio_data, 'riskLabel', None) or getattr(portfolio_data, 'risk_label', None)
@@ -97,6 +110,7 @@ async def save_data(
                 # Create new
                 portfolio = PortfolioModel(
                     id=portfolio_data.id,
+                    user_id=user_id,
                     name=portfolio_data.name,
                     color=portfolio_data.color,
                     capital=portfolio_data.capital,
@@ -165,22 +179,30 @@ async def save_data(
         
         # Save family members
         if data.familyMembers:
-            # Get all existing member IDs
-            existing_member_ids = {m.id for m in db.query(FamilyMemberModel).all()}
+            # Get all existing member IDs for this user
+            query = db.query(FamilyMemberModel)
+            if user_id:
+                query = query.filter(FamilyMemberModel.user_id == user_id)
+            existing_members = query.all()
+            existing_member_ids = {m.id for m in existing_members}
             incoming_member_ids = {m.id for m in data.familyMembers}
             
             # Delete members that are no longer in the incoming data
             members_to_delete = existing_member_ids - incoming_member_ids
             if members_to_delete:
-                db.query(FamilyMemberModel).filter(
+                delete_query = db.query(FamilyMemberModel).filter(
                     FamilyMemberModel.id.in_(list(members_to_delete))
-                ).delete(synchronize_session=False)
+                )
+                if user_id:
+                    delete_query = delete_query.filter(FamilyMemberModel.user_id == user_id)
+                delete_query.delete(synchronize_session=False)
             
             # Create or update family members
             for member_data in data.familyMembers:
-                member = db.query(FamilyMemberModel).filter(
-                    FamilyMemberModel.id == member_data.id
-                ).first()
+                query = db.query(FamilyMemberModel).filter(FamilyMemberModel.id == member_data.id)
+                if user_id:
+                    query = query.filter(FamilyMemberModel.user_id == user_id)
+                member = query.first()
                 
                 # Pydantic models use attribute access - use displayOrder (camelCase) as defined in schema
                 # With populate_by_name=True, we can access as displayOrder
@@ -200,6 +222,7 @@ async def save_data(
                     # Create new
                     member = FamilyMemberModel(
                         id=member_data.id,
+                        user_id=user_id,
                         name=member_data.name,
                         amount=member_data.amount,
                         display_order=display_order
@@ -217,12 +240,28 @@ async def save_data(
 
 
 @app.get("/api/data/load", response_model=LoadDataResponse)
-async def load_data(db: Session = Depends(get_db)):
+async def load_data(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_optional)
+):
     """Load all portfolios and scenarios."""
     try:
-        portfolios = db.query(PortfolioModel).all()
+        user_id = current_user.id if current_user else None
+        
+        # Load portfolios - filter by user_id if authenticated
+        query = db.query(PortfolioModel)
+        if user_id:
+            query = query.filter(PortfolioModel.user_id == user_id)
+        portfolios = query.all()
+        
+        # Scenarios are shared (no user filtering)
         scenarios = db.query(ScenarioModel).all()
-        family_members = db.query(FamilyMemberModel).order_by(FamilyMemberModel.display_order, FamilyMemberModel.created_at).all()
+        
+        # Load family members - filter by user_id if authenticated
+        query = db.query(FamilyMemberModel).order_by(FamilyMemberModel.display_order, FamilyMemberModel.created_at)
+        if user_id:
+            query = query.filter(FamilyMemberModel.user_id == user_id)
+        family_members = query.all()
         
         default_scenario = db.query(ScenarioModel).filter(
             ScenarioModel.is_default == True

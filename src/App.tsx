@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Portfolio, Scenario, ChartType, FamilyMember, YearResult } from './types';
 import { scenarios, defaultScenario } from './data/scenarios';
 import { portfolioTemplates, portfolioColors } from './data/templates';
 import { useSimulation } from './hooks/useSimulation';
 import { saveData, loadData } from './services/api';
+import { useAuth } from './contexts/AuthContext';
 import Header from './components/Header';
 import ScenarioSelector from './components/ScenarioSelector';
 import PortfolioCard from './components/PortfolioBuilder/PortfolioCard';
@@ -13,10 +15,15 @@ import CapitalChart from './components/Charts/CapitalChart';
 import IncomeChart from './components/Charts/IncomeChart';
 import BreakdownChart from './components/Charts/BreakdownChart';
 import AllocationChart from './components/Charts/AllocationChart';
+import Login from './components/Login';
+import Register from './components/Register';
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
+import AdminPanel from './components/AdminPanel';
 import { formatCurrency } from './utils/formatters';
 import './App.css';
 
-function App() {
+function PortfolioApp() {
   // Initialize with default family member (empty name will default to "Owner Portfolio")
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([
     { id: 'default-1', name: '', amount: 675000, displayOrder: 0, color: '#FF6B6B' }
@@ -297,8 +304,10 @@ function App() {
             setSelectedScenario(defaultSc);
           }
         }
-      } catch (error) {
-        console.warn('Could not load data from backend, using defaults:', error);
+      } catch (error: any) {
+        // Log error but don't render it - just use defaults
+        const errorMsg = error?.response?.data?.detail || error?.message || 'Unknown error';
+        console.warn('Could not load data from backend, using defaults:', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       } finally {
         setIsLoading(false);
       }
@@ -732,6 +741,18 @@ function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<ProtectedRoute requireAuth={false}><Login /></ProtectedRoute>} />
+      <Route path="/register" element={<ProtectedRoute requireAuth={false}><Register /></ProtectedRoute>} />
+      <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+      <Route path="/" element={<ProtectedRoute><PortfolioApp /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

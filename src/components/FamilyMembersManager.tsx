@@ -189,9 +189,6 @@ export default function FamilyMembersManager({ familyMembers, onUpdate }: Family
                     onFocus={() => setIsEditing({ ...isEditing, [member.id]: true })}
                     placeholder={isFirstMember ? "Owner name" : "Member name"}
                     className="w-full px-3 py-2 bg-white/60 backdrop-blur-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 text-base font-bold text-gray-800 placeholder:text-gray-500"
-                    style={{ 
-                      focusRingColor: memberColor 
-                    }}
                   />
                   {isFirstMember && !member.name.trim() && (
                     <p className="text-xs text-gray-600 mt-1 opacity-75">Defaults to "Owner Portfolio"</p>

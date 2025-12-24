@@ -11,12 +11,13 @@ export const portfolioTemplates: PortfolioTemplate[] = [
     riskLabel: 'Risk: High',
     horizon: '2026 - 2029',
     overperformStrategy: {
-      title: 'Over-performing rule: Harvest & Rotate',
+      title: 'Path To Balanced Allocation',
       content: [
-        'Trigger: if an asset exceeds target by ≥10% (e.g., TVBETETF > 70%).',
-        'Sell only the excess above the trigger (never below original target).',
-        'Reallocate proceeds to ERNX and/or FIDELIS to move gradually toward the Balanced portfolio.',
-        'No new cash injections; rebalance using harvested gains only.'
+        'Capital Coverage: Total invested capital ≥ 15–20× annual living expenses',
+        'Drawdown Sensitivity: A ≥ 25% portfolio drawdown would materially delay independence',
+        'Age Threshold: Investor age ≥ 38–42',
+        'Income Stability: Career income becoming less predictable',
+        "Dependency Change: One or more dependents relying on the investor's income"
       ]
     },
     capital: 675000,

@@ -30,6 +30,45 @@ const api = axios.create({
   },
 });
 
+// Add auth token to requests if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle token refresh on 401
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+            refresh_token: refreshToken
+          });
+          const { access_token } = response.data;
+          localStorage.setItem('access_token', access_token);
+          originalRequest.headers.Authorization = `Bearer ${access_token}`;
+          return api(originalRequest);
+        }
+      } catch (refreshError) {
+        // Refresh failed, clear tokens and redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface SaveDataRequest {
   portfolios: Portfolio[];
   scenarios: Scenario[];
@@ -153,6 +192,12 @@ function transformFamilyMember(member: any): FamilyMember {
 export async function loadData(): Promise<LoadDataResponse> {
   try {
     const response = await api.get<any>('/api/data/load');
+    
+    // Ensure response.data exists and is an object
+    if (!response.data || typeof response.data !== 'object') {
+      throw new Error('Invalid response format from server');
+    }
+    
     // Transform scenarios to ensure proper format
     const transformedScenarios = (response.data.scenarios || []).map(transformScenario);
     // Transform portfolios to ensure proper format
@@ -166,9 +211,11 @@ export async function loadData(): Promise<LoadDataResponse> {
       scenarios: transformedScenarios,
       familyMembers: transformedFamilyMembers.length > 0 ? transformedFamilyMembers : undefined
     };
-  } catch (error) {
-    console.error('Error loading data:', error);
-    throw error;
+  } catch (error: any) {
+    // Don't throw error objects directly - convert to string
+    const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to load data';
+    console.error('Error loading data:', typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
+    throw new Error(typeof errorMessage === 'string' ? errorMessage : 'Failed to load data');
   }
 }
 
@@ -177,6 +224,154 @@ export async function clearData(): Promise<void> {
     await api.delete('/api/data/clear');
   } catch (error) {
     console.error('Error clearing data:', error);
+    throw error;
+  }
+}
+
+// Authentication API functions
+export interface User {
+  id: string;
+  email: string;
+  email_verified: boolean;
+  first_name?: string;
+  last_name?: string;
+  role: 'freemium' | 'paid' | 'admin';
+  subscription_tier?: string;
+  subscription_expires_at?: string;
+  is_primary_account: boolean;
+  created_at: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export async function register(data: RegisterRequest): Promise<User> {
+  try {
+    const response = await api.post<User>('/api/auth/register', data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error registering:', error);
+    throw error;
+  }
+}
+
+export async function login(data: LoginRequest): Promise<TokenResponse> {
+  try {
+    // Backend expects the data wrapped in a 'credentials' object or directly as email/password
+    // Based on the schema, it should be sent directly
+    const response = await api.post<TokenResponse>('/api/auth/login', {
+      email: data.email,
+      password: data.password
+    });
+    // Store tokens
+    localStorage.setItem('access_token', response.data.access_token);
+    localStorage.setItem('refresh_token', response.data.refresh_token);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error logging in:', error);
+    throw error;
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await api.post('/api/auth/logout');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+  } catch (error) {
+    console.error('Error logging out:', error);
+    // Clear tokens even if request fails
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+  }
+}
+
+export async function getCurrentUser(): Promise<User> {
+  try {
+    const response = await api.get<User>('/api/auth/me');
+    return response.data;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    throw error;
+  }
+}
+
+// Admin API functions
+export interface UserUpdateRequest {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  role?: 'freemium' | 'paid' | 'admin';
+  subscription_tier?: string;
+}
+
+export interface PlatformStats {
+  total_users: number;
+  freemium_users: number;
+  paid_users: number;
+  admin_users: number;
+}
+
+export async function getUsers(): Promise<User[]> {
+  try {
+    const response = await api.get<User[]>('/api/admin/users');
+    return response.data;
+  } catch (error) {
+    console.error('Error getting users:', error);
+    throw error;
+  }
+}
+
+export async function getUser(userId: string): Promise<User> {
+  try {
+    const response = await api.get<User>(`/api/admin/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error getting user:', error);
+    throw error;
+  }
+}
+
+export async function updateUser(userId: string, data: UserUpdateRequest): Promise<User> {
+  try {
+    const response = await api.put<User>(`/api/admin/users/${userId}`, data);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating user:', error);
+    throw error;
+  }
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  try {
+    await api.delete(`/api/admin/users/${userId}`);
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    throw error;
+  }
+}
+
+export async function getPlatformStats(): Promise<PlatformStats> {
+  try {
+    const response = await api.get<PlatformStats>('/api/admin/stats');
+    return response.data;
+  } catch (error) {
+    console.error('Error getting stats:', error);
     throw error;
   }
 }

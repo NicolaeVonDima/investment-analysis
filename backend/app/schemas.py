@@ -101,3 +101,37 @@ class LoadDataResponse(BaseModel):
     
     model_config = ConfigDict(populate_by_name=True)
 
+
+# Authentication Schemas
+class UserRegister(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=8, max_length=100)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    email_verified: bool
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: str
+    subscription_tier: Optional[str] = None
+    subscription_expires_at: Optional[datetime] = None
+    is_primary_account: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
