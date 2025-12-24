@@ -73,19 +73,42 @@ export default function ScenarioSelector({
     return calculateWithdrawalRateForScenario(selectedScenario);
   }, [selectedScenario]);
 
+  // Get border color based on selected scenario
+  const getBorderColor = (name: string) => {
+    switch (name.toLowerCase()) {
+      case 'pessimistic':
+        return '#EF4444'; // rose-500
+      case 'average':
+        return '#0EA5E9'; // sky-500
+      case 'optimistic':
+        return '#10B981'; // emerald-500
+      default:
+        return '#6B7280'; // gray-500
+    }
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Scenario</h3>
+    <div 
+      className="bg-white rounded-lg shadow-lg border-2 p-4"
+      style={{ borderColor: getBorderColor(selectedScenario.name) }}
+    >
+      <div className="flex justify-between items-center mb-3 pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <div 
+            className="w-3 h-3 rounded-full flex-shrink-0"
+            style={{ backgroundColor: getBorderColor(selectedScenario.name) }}
+          />
+          <h3 className="text-base font-semibold text-gray-800">Scenario</h3>
+        </div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-sm text-gray-600 hover:text-gray-800"
+          className="text-xs text-gray-600 hover:text-gray-800 font-medium"
         >
           {isExpanded ? '▼ Collapse' : '▶ Expand'}
         </button>
       </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-3">
         {scenarios
           .sort((a, b) => {
             // Define order: Pessimistic, Average, Optimistic
@@ -99,28 +122,28 @@ export default function ScenarioSelector({
           .map((scenario) => {
           const isSelected = selectedScenario.name === scenario.name;
           
-          // Define colors for each scenario (muted/subtle colors)
+          // Define colors for each scenario matching portfolio card style
           const getScenarioColors = (name: string) => {
             switch (name.toLowerCase()) {
               case 'pessimistic':
                 return {
-                  selected: 'bg-rose-400 text-white',
-                  unselected: 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                  selected: 'bg-rose-500 text-white border-rose-500',
+                  unselected: 'bg-white text-rose-700 hover:bg-rose-50 border-2 border-rose-200'
                 };
               case 'average':
                 return {
-                  selected: 'bg-sky-400 text-white',
-                  unselected: 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                  selected: 'bg-sky-500 text-white border-sky-500',
+                  unselected: 'bg-white text-sky-700 hover:bg-sky-50 border-2 border-sky-200'
                 };
               case 'optimistic':
                 return {
-                  selected: 'bg-emerald-400 text-white',
-                  unselected: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                  selected: 'bg-emerald-500 text-white border-emerald-500',
+                  unselected: 'bg-white text-emerald-700 hover:bg-emerald-50 border-2 border-emerald-200'
                 };
               default:
                 return {
-                  selected: 'bg-primary text-white',
-                  unselected: 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  selected: 'bg-primary text-white border-primary',
+                  unselected: 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-200'
                 };
             }
           };
@@ -131,7 +154,7 @@ export default function ScenarioSelector({
             <button
               key={scenario.name}
               onClick={() => handlePresetSelect(scenario)}
-              className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
+              className={`flex-1 px-3 py-2 rounded-lg font-semibold transition-all border-2 shadow-sm text-sm ${
                 isSelected ? colors.selected : colors.unselected
               }`}
             >
@@ -141,26 +164,26 @@ export default function ScenarioSelector({
         })}
       </div>
 
-      <div className={`border-t pt-4 ${isExpanded ? getEditingBackgroundColor(selectedScenario.name) : ''} ${isExpanded ? 'rounded-lg p-4 -mx-4 -mb-4' : ''}`}>
+      <div className={`border-t pt-3 ${isExpanded ? getEditingBackgroundColor(selectedScenario.name) : ''} ${isExpanded ? 'rounded-lg p-3 -mx-4 -mb-4 mt-2' : ''}`}>
         {isExpanded ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-5 gap-4">
+          <div className="space-y-3">
+            <div className="grid grid-cols-5 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Int Inflation (%)
                 </label>
                 <input
                   type="number"
                   value={(selectedScenario.inflation * 100).toFixed(2)}
                   onChange={(e) => handleInflationChange(parseFloat(e.target.value) / 100 || 0)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-2 py-1.5 border-2 border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
                   max="20"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Romanian Inflation (%)
                 </label>
                 <input
@@ -170,14 +193,14 @@ export default function ScenarioSelector({
                     ...selectedScenario,
                     romanianInflation: parseFloat(e.target.value) / 100 || 0.08
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-2 py-1.5 border-2 border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
                   max="20"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Growth Cushion (%)
                 </label>
                 <input
@@ -187,14 +210,14 @@ export default function ScenarioSelector({
                     ...selectedScenario,
                     growthCushion: parseFloat(e.target.value) / 100 || 0.02
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-2 py-1.5 border-2 border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
                   max="10"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Tax on Sale Proceeds (%)
                 </label>
                 <input
@@ -204,14 +227,14 @@ export default function ScenarioSelector({
                     ...selectedScenario,
                     taxOnSaleProceeds: parseFloat(e.target.value) / 100 || 0
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-2 py-1.5 border-2 border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
                   max="50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Tax on Dividends (%)
                 </label>
                 <input
@@ -221,7 +244,7 @@ export default function ScenarioSelector({
                     ...selectedScenario,
                     taxOnDividends: parseFloat(e.target.value) / 100 || 0
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full px-2 py-1.5 border-2 border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   step="0.1"
                   min="0"
                   max="50"
@@ -235,9 +258,9 @@ export default function ScenarioSelector({
             />
             
             {/* Withdrawal Rate Preview */}
-            <div className="pt-4 border-t border-gray-200">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Withdrawal Rate Preview</h4>
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-3 border border-purple-100">
+            <div className="pt-3 border-t border-gray-200">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Withdrawal Rate Preview</h4>
+              <div className="bg-white rounded-lg p-3 border-2 border-purple-200 shadow-sm">
                 {/* Formula Display */}
                 <div className="flex items-center justify-center gap-2 flex-wrap text-sm mb-2">
                   <span className="text-gray-600">Weighted Return:</span>
@@ -278,11 +301,11 @@ export default function ScenarioSelector({
             </div>
             
             {onSave && (
-              <div className="pt-4 border-t border-gray-200 flex justify-end">
+              <div className="pt-3 border-t border-gray-200 flex justify-end">
                 <button
                   onClick={() => handleSave(selectedScenario)}
                   disabled={saveStatus[selectedScenario.name] === 'saving'}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                     saveStatus[selectedScenario.name] === 'saving'
                       ? 'bg-gray-400 text-white cursor-not-allowed'
                       : saveStatus[selectedScenario.name] === 'saved'
@@ -301,31 +324,31 @@ export default function ScenarioSelector({
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               {/* First Column - Asset Returns */}
               <div>
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-3 border border-green-100">
-                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Asset Returns</h4>
+                <div className="bg-white rounded-lg p-3 border-2 border-green-200 shadow-sm">
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 pb-1.5 border-b">Asset Returns</h4>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between py-1 border-b border-green-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">VWCE</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.vwce)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">VWCE</span>
+                      <span className="text-sm font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.vwce)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-green-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">TVBETETF</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.tvbetetf)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">TVBETETF</span>
+                      <span className="text-sm font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.tvbetetf)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-green-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">ERNX</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ernx)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">ERNX</span>
+                      <span className="text-sm font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ernx)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-green-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">AYEG</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ayeg)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">AYEG</span>
+                      <span className="text-sm font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.ayeg)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-xs text-gray-600 font-medium">FIDELIS</span>
-                      <span className="text-base font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.fidelis)}</span>
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-xs text-gray-700 font-medium">FIDELIS</span>
+                      <span className="text-sm font-bold text-green-700">{formatPercentage(selectedScenario.assetReturns.fidelis)}</span>
                     </div>
                   </div>
                 </div>
@@ -333,28 +356,28 @@ export default function ScenarioSelector({
               
               {/* Second Column - Economic & Tax */}
               <div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-3 border border-blue-100">
-                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Economic & Tax</h4>
+                <div className="bg-white rounded-lg p-3 border-2 border-blue-200 shadow-sm">
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 pb-1.5 border-b">Economic & Tax</h4>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">Int Inflation</span>
-                      <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.inflation)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">Int Inflation</span>
+                      <span className="text-sm font-bold text-blue-700">{formatPercentage(selectedScenario.inflation)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">Romanian Inflation</span>
-                      <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.romanianInflation ?? 0.08)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">Romanian Inflation</span>
+                      <span className="text-sm font-bold text-blue-700">{formatPercentage(selectedScenario.romanianInflation ?? 0.08)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">Growth Cushion</span>
-                      <span className="text-base font-bold text-blue-700">{formatPercentage(selectedScenario.growthCushion ?? 0.02)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">Growth Cushion</span>
+                      <span className="text-sm font-bold text-blue-700">{formatPercentage(selectedScenario.growthCushion ?? 0.02)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-blue-100 last:border-0">
-                      <span className="text-xs text-gray-600 font-medium">Tax on Sale Proceeds</span>
-                      <span className="text-base font-bold text-orange-600">{formatPercentage(selectedScenario.taxOnSaleProceeds ?? 0)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                      <span className="text-xs text-gray-700 font-medium">Tax on Sale Proceeds</span>
+                      <span className="text-sm font-bold text-orange-600">{formatPercentage(selectedScenario.taxOnSaleProceeds ?? 0)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-xs text-gray-600 font-medium">Tax on Dividends</span>
-                      <span className="text-base font-bold text-orange-600">{formatPercentage(selectedScenario.taxOnDividends ?? 0)}</span>
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-xs text-gray-700 font-medium">Tax on Dividends</span>
+                      <span className="text-sm font-bold text-orange-600">{formatPercentage(selectedScenario.taxOnDividends ?? 0)}</span>
                     </div>
                   </div>
                 </div>
@@ -362,45 +385,45 @@ export default function ScenarioSelector({
               
               {/* Third Column - Withdrawal Rate */}
               <div>
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-3 border border-purple-100">
-                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Withdrawal Rate</h4>
+                <div className="bg-white rounded-lg p-3 border-2 border-purple-200 shadow-sm">
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 pb-1.5 border-b">Withdrawal Rate</h4>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">Weighted Return (Growth+Cashflow)</span>
-                      <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedReturn)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-xs text-gray-700 font-medium">Weighted Return (Growth+Cashflow)</span>
+                      <span className="text-xs font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedReturn)}</span>
                     </div>
                     {withdrawalCalc.weightedTrimRate > 0 && (
-                      <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                        <span className="text-xs text-gray-600 font-medium">+ Trim Income</span>
-                        <span className="text-sm font-semibold text-purple-600">{formatPercentage(withdrawalCalc.weightedTrimRate)}</span>
+                      <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
+                        <span className="text-xs text-gray-700 font-medium">+ Trim Income</span>
+                        <span className="text-xs font-semibold text-purple-600">{formatPercentage(withdrawalCalc.weightedTrimRate)}</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">- Weighted Inflation</span>
-                      <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedInflation)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-xs text-gray-700 font-medium">- Weighted Inflation</span>
+                      <span className="text-xs font-semibold text-purple-700">{formatPercentage(withdrawalCalc.weightedInflation)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">- Growth Cushion</span>
-                      <span className="text-sm font-semibold text-purple-700">{formatPercentage(withdrawalCalc.growthCushion)}</span>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-xs text-gray-700 font-medium">- Growth Cushion</span>
+                      <span className="text-xs font-semibold text-purple-700">{formatPercentage(withdrawalCalc.growthCushion)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-1 border-b border-purple-100">
-                      <span className="text-xs text-gray-600 font-medium">Raw Rate</span>
-                      <span className={`text-sm font-semibold ${withdrawalCalc.rawWithdrawalRate < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                    <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
+                      <span className="text-xs text-gray-700 font-medium">Raw Rate</span>
+                      <span className={`text-xs font-semibold ${withdrawalCalc.rawWithdrawalRate < 0 ? 'text-red-600' : 'text-gray-700'}`}>
                         {formatPercentage(withdrawalCalc.rawWithdrawalRate)}
                       </span>
                     </div>
-                    <div className="pt-1 border-t-2 border-purple-200">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
+                    <div className="pt-1.5 mt-1.5 border-t-2 border-purple-200">
+                      <div className="flex items-center justify-between flex-wrap gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-semibold text-gray-700">Final Withdrawal Rate:</span>
-                          <span className="text-lg font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
+                          <span className="text-sm font-bold text-purple-800">{formatPercentage(withdrawalCalc.withdrawalRate)}</span>
                           {withdrawalCalc.floorApplied ? (
-                            <span className="text-xs text-gray-500">✓ Floor applied (0% minimum)</span>
+                            <span className="text-xs text-gray-500">✓ Floor applied</span>
                           ) : (
-                            <span className="text-xs text-gray-500 italic">No floor or cap applied</span>
+                            <span className="text-xs text-gray-500 italic">No floor or cap</span>
                           )}
-                          <span className="text-xs text-gray-500 italic">* Default allocation: 35% VWCE, 25% TVBETETF, 10% AYEG</span>
                         </div>
+                        <span className="text-xs text-gray-500 italic w-full">* Default: 35% VWCE, 25% TVBETETF, 10% AYEG</span>
                       </div>
                     </div>
                   </div>

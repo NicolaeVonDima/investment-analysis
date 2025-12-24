@@ -1,5 +1,4 @@
 # docker-compose.dev.yml
-version: '3.8'
 
 services:
   portfolio-app-dev:
@@ -8,7 +7,7 @@ services:
       dockerfile: docker/Dockerfile.dev
     container_name: portfolio-simulator-dev
     ports:
-      - "3000:3000"
+      - "3005:3000"
     volumes:
       - .:/app
       - /app/node_modules

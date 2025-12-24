@@ -9,6 +9,7 @@ export interface FamilyMember {
   name: string;
   amount: number;
   displayOrder?: number;
+  color?: string; // Color for the member's card and portfolio
 }
 
 export interface Portfolio {

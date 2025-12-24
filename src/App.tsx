@@ -19,7 +19,7 @@ import './App.css';
 function App() {
   // Initialize with default family member (empty name will default to "Owner Portfolio")
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([
-    { id: 'default-1', name: '', amount: 675000, displayOrder: 0 }
+    { id: 'default-1', name: '', amount: 675000, displayOrder: 0, color: '#FF6B6B' }
   ]);
   
   // Calculate total investment from family members
@@ -32,13 +32,15 @@ function App() {
     // Use "Owner Portfolio" as default name if member name is empty
     const memberDisplayName = member.name.trim() || 'Owner Portfolio';
     const portfolioName = `${memberDisplayName}'s Portfolio`;
-    const memberColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F'];
-    const colorIndex = (member.displayOrder || 0) % memberColors.length;
+    // Use member's color if set, otherwise fall back to default colors
+    const defaultColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F'];
+    const colorIndex = (member.displayOrder || 0) % defaultColors.length;
+    const memberColor = member.color || defaultColors[colorIndex];
     
     return {
       id: existingPortfolio?.id || `member-portfolio-${member.id}`,
       name: portfolioName,
-      color: existingPortfolio?.color || memberColors[colorIndex],
+      color: existingPortfolio?.color || memberColor,
       capital: member.amount, // Always use member's current amount
       goal: `Portfolio allocation for ${memberDisplayName}`,
       riskLabel: 'Risk: Custom',
@@ -167,7 +169,7 @@ function App() {
               ? data.portfolios[0].capital 
               : 675000;
             loadedFamilyMembers = [
-              { id: 'default-1', name: '', amount: loadedCapital, displayOrder: 0 } // Empty name defaults to "Owner Portfolio"
+              { id: 'default-1', name: '', amount: loadedCapital, displayOrder: 0, color: '#FF6B6B' } // Empty name defaults to "Owner Portfolio"
             ];
             setFamilyMembers(loadedFamilyMembers);
           }
@@ -216,17 +218,39 @@ function App() {
             p.id === `member-portfolio-${member.id}`
           );
           
+          // If member doesn't have a color but portfolio does, migrate the color to the member
+          if (!member.color && existingPortfolio?.color) {
+            member.color = existingPortfolio.color;
+          }
+          
           // Create portfolio with current member data (name and amount)
           const portfolio = createMemberPortfolio(member, existingPortfolio);
           
           // Preserve allocation and rules from existing portfolio if it exists
+          // But always use member's color if set
           if (existingPortfolio) {
             portfolio.allocation = existingPortfolio.allocation;
             portfolio.rules = existingPortfolio.rules;
           }
+          // Update color from member if member has a color set
+          if (member.color) {
+            portfolio.color = member.color;
+          }
           
           return portfolio;
         });
+        
+        // Update family members with migrated colors
+        if (memberPortfolios.some((p, idx) => sortedFamilyMembers[idx] && !sortedFamilyMembers[idx].color && p.color)) {
+          const updatedMembers = sortedFamilyMembers.map((member, idx) => {
+            const portfolio = memberPortfolios[idx];
+            if (!member.color && portfolio && portfolio.id === `member-portfolio-${member.id}`) {
+              return { ...member, color: portfolio.color };
+            }
+            return member;
+          });
+          setFamilyMembers(updatedMembers);
+        }
 
         // Ensure we always have both strategic and member portfolios
         const allPortfolios = [...sortedStrategicPortfolios, ...memberPortfolios];
@@ -350,22 +374,27 @@ function App() {
       // Sort family members by display_order to maintain order
       const sortedFamilyMembers = [...familyMembers].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
       
-      // Create/update member portfolios - sync with family members in display_order
-      const memberPortfolios = sortedFamilyMembers.map(member => {
-        // Find existing portfolio by member ID (most reliable)
-        const existing = prev.find(p => p.id === `member-portfolio-${member.id}`);
-        
-        // Create/update portfolio with current member data
-        const updatedPortfolio = createMemberPortfolio(member, existing);
-        
-        // Preserve allocation and rules from existing portfolio if it exists
-        if (existing) {
-          updatedPortfolio.allocation = existing.allocation;
-          updatedPortfolio.rules = existing.rules;
-        }
-        
-        return updatedPortfolio;
-      });
+        // Create/update member portfolios - sync with family members in display_order
+        const memberPortfolios = sortedFamilyMembers.map(member => {
+          // Find existing portfolio by member ID (most reliable)
+          const existing = prev.find(p => p.id === `member-portfolio-${member.id}`);
+          
+          // Create/update portfolio with current member data
+          const updatedPortfolio = createMemberPortfolio(member, existing);
+          
+          // Preserve allocation and rules from existing portfolio if it exists
+          // But always use member's color if set
+          if (existing) {
+            updatedPortfolio.allocation = existing.allocation;
+            updatedPortfolio.rules = existing.rules;
+          }
+          // Update color from member if member has a color set
+          if (member.color) {
+            updatedPortfolio.color = member.color;
+          }
+          
+          return updatedPortfolio;
+        });
       
       return [...updatedStrategic, ...memberPortfolios];
     });
@@ -479,13 +508,14 @@ function App() {
     const numPortfolios = portfolios.length;
     if (numPortfolios === 0) return 'fit-content';
     
-    // Check if we have member portfolios (which means we'll show the family total card)
-    const hasMemberPortfolios = portfolios.some(p => p.name.endsWith("'s Portfolio"));
-    const numCards = hasMemberPortfolios ? numPortfolios + 1 : numPortfolios; // +1 for family card
+    // Check if we have 2+ member portfolios (which means we'll show the family total card)
+    const memberPortfolios = portfolios.filter(p => p.name.endsWith("'s Portfolio"));
+    const shouldShowFamilyCard = memberPortfolios.length > 1;
+    const numCards = shouldShowFamilyCard ? numPortfolios + 1 : numPortfolios; // +1 for family card
     
     // Calculate width: regular cards + family card (if present)
     let totalWidth = numPortfolios * regularCardWidth;
-    if (hasMemberPortfolios) {
+    if (shouldShowFamilyCard) {
       totalWidth += familyCardWidth; // Add the narrow family card
     }
     
@@ -574,8 +604,8 @@ function App() {
                   );
                 })}
                 
-                {/* Family Total Card - only show if there are member portfolios */}
-                {sortedMembers.length > 0 && (
+                {/* Family Total Card - only show if there are 2+ member portfolios */}
+                {sortedMembers.length > 1 && (
                   <div className="flex flex-shrink-0" style={{ width: `${familyCardWidth}px` }}>
                     <FamilyTotalCard
                       memberPortfolios={sortedMembers}
